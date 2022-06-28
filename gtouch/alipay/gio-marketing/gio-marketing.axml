@@ -1,0 +1,4 @@
+<cover-view class="gio-message-inner" a:if="{{visible}}">
+  <cover-image mode="widthFix" src="{{imageUrl}}" class="gio-message-image" onTap="onTapTarget" />
+  <cover-view class="gio-message-close" onTap="onClose">╳</cover-view>
+</cover-view>

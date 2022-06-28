@@ -1,0 +1,5 @@
+<swiper wx:if="{{!!banners}}" class="gio-swiper" bindchange="onChange" indicator-dots="{{indicatorDots}}" indicator-color="{{indicatorColor}}" indicator-active-color="{{indicatorActiveColor}}" autoplay="{{autoplay}}" interval="{{interval}}" duration="{{duration}}" circular="{{circular}}" vertical="{{vertical}}" previous-margin="{{previousMargin}}" next-margin="{{nextMargin}}" easing-function="{{easingFunction}}">
+  <swiper-item wx:for="{{banners}}" wx:key="id">
+    <image class="image" src="{{item.content}}" data-current="{{index}}" data-message="{{item}}" bindload="onImgLoad" bindtap="onTapTarget" />
+  </swiper-item>
+</swiper>

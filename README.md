@@ -27,4 +27,4 @@ GrowingIO 小程序采集 SDK (GrowingIO Miniprogram Autotracker)
 
 ## 集成文档（Integration Document）
 
-[OP集成文档](https://growingio.github.io/growingio-sdk-docs/docs/minprogram/3.8)
+[Saas集成文档](https://docs.growingio.com/v3/developer-manual/sdkintegrated/mini-program-sdk/3.8/)

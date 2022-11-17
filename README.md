@@ -1,9 +1,13 @@
 GrowingIO 小程序采集 SDK (GrowingIO Miniprogram Autotracker)
 ======
 
-![GrowingIO](https://www.growingio.com/vassets/images/home_v3/gio-logo-primary.svg)
+<img src="https://camo.githubusercontent.com/c3c2e7ce30ff03eed73f096b4dd254a30d47beda2a5185b20efb1dc52998e5a0/68747470733a2f2f7777772e67726f77696e67696f2e636f6d2f766173736574732f696d616765732f686f6d655f76332f67696f2d6c6f676f2d7072696d6172792e737667" width="70%" ></img>
 
-## GrowingIO简介（GrowingIO Introduction））
+[![License](https://img.shields.io/github/license/growingio/growingio-sdk-miniprogram-autotracker)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/blob/main/LICENSE)
+[![GitHub release](https://img.shields.io/badge/release-CDP--v3.8.10-blue)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/releases)
+[![GitHub release](https://img.shields.io/badge/release-Saas--v3.8.9-blue)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/releases)
+
+## GrowingIO简介（GrowingIO Introduction）
 
 [**GrowingIO**](https://www.growingio.com/)（北京易数科技有限公司）是基于用户行为数据的增长平台，国内领先的数据运营解决方案供应商。为产品、运营、市场、数据团队及管理者等，提供客户数据平台、获客分析、产品分析、智能运营等产品和咨询服务，帮助企业在数据化升级的路上，提升数据驱动能力，实现更好的增长。
 
@@ -27,4 +31,4 @@ GrowingIO 小程序采集 SDK (GrowingIO Miniprogram Autotracker)
 
 ## 集成文档（Integration Document）
 
-[OP集成文档](https://growingio.github.io/growingio-sdk-docs/docs/minprogram/3.8)
+[OP集成文档](https://growingio.github.io/growingio-sdk-docs/docs/miniprogram/3.8)

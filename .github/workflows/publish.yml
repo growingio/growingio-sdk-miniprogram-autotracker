@@ -20,7 +20,7 @@ jobs:
           node-version: 12
           registry-url: https://registry.npmjs.org/
       - name: Publish
-        run: yarn publish --non-interactive --access public
+        run: yarn publish --tag latest --non-interactive --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
   release:

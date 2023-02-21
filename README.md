@@ -3,8 +3,8 @@
 <img src="https://camo.githubusercontent.com/c3c2e7ce30ff03eed73f096b4dd254a30d47beda2a5185b20efb1dc52998e5a0/68747470733a2f2f7777772e67726f77696e67696f2e636f6d2f766173736574732f696d616765732f686f6d655f76332f67696f2d6c6f676f2d7072696d6172792e737667" width="70%" ></img>
 
 [![License](https://img.shields.io/github/license/growingio/growingio-sdk-miniprogram-autotracker)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/blob/main/LICENSE)
-[![GitHub release](https://img.shields.io/badge/release-CDP--v3.8.12-blue)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/releases)
-[![GitHub release](https://img.shields.io/badge/release-Saas--v3.8.11-blue)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/releases)
+[![GitHub release](https://img.shields.io/badge/release-CDP--v3.8.13-blue)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/releases)
+[![GitHub release](https://img.shields.io/badge/release-Saas--v3.8.12-blue)](https://github.com/growingio/growingio-sdk-miniprogram-autotracker/releases)
 
 ## GrowingIO 简介（GrowingIO Introduction）
 

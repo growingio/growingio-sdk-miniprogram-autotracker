@@ -1,0 +1,11 @@
+/**/lzString.js
+/test/**/utils
+/dist
+/**/dist
+/typings
+/node_modules
+/test/autotest/dist
+/test/wx-demo/dist
+/test/**/*.json
+/tsconfig.json
+/demos/**

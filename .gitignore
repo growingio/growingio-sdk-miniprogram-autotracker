@@ -12,6 +12,11 @@
 /**/.vscode*
 /**/.cache
 
+# develop
+/demos
+/dist
+/test
+
 # misc
 .DS_Store
 

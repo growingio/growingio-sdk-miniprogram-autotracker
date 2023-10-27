@@ -1,0 +1,7 @@
+.gio-swiper{
+  width: 100vw;
+}
+.gio-swiper .image{
+  width: 100%;
+  height: 100%;
+}

@@ -20,3 +20,10 @@
 /npm-debug.log*
 /yarn-error.log
 junit.xml
+
+# dist
+/dist
+
+# develop
+/demos
+/test

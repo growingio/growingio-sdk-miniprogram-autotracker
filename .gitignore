@@ -20,3 +20,16 @@
 /npm-debug.log*
 /yarn-error.log
 junit.xml
+
+# develop
+bin/*.sh
+bin/test
+bin/dev
+src/plugins
+src/pluginsOut/extra
+src/pluginsOut/performance
+src/pluginsOut/extra
+src/pluginsOut/extra
+
+test
+jest*

@@ -68,6 +68,7 @@ class DataStore implements DataStoreType {
   constructor(public growingIO: GrowingIOType) {
     this.initStorageInfo();
     this.eventContextBuilder = new EventContextBuilder(this.growingIO).main;
+    this.eventHooks = new EventHooks(this.growingIO);
     this.shareOut = false;
     this.lastVisitEvent = {};
     this.lastPageEvent = {};
@@ -75,7 +76,6 @@ class DataStore implements DataStoreType {
     this.generalProps = {};
     this.trackTimers = {};
     this.interceptEvents = [];
-    this.eventHooks = new EventHooks(this.growingIO);
     // visit、page事件监听
     this.growingIO.emitter.on('onComposeAfter', ({ composedEvent }) => {
       if (composedEvent.eventType === 'VISIT' || composedEvent.t === 'vst') {
@@ -243,6 +243,13 @@ class DataStore implements DataStoreType {
     // 是否开启强制插件模式
     if (vdsConfig.pluginMode) {
       this.growingIO.inPlugin = true;
+    }
+    // 请求超时时长设置的合法区间校验，值小于等于0ms认为不合法，改回5秒，浏览器默认有2分钟的上限
+    if (
+      isNaN(Number(vdsConfig.requestTimeout)) ||
+      vdsConfig.requestTimeout <= 0
+    ) {
+      vdsConfig.requestTimeout = 5000;
     }
     this.growingIO.vdsConfig = {
       ...vdsConfig,

@@ -5,8 +5,6 @@ export interface UploaderType {
   requestQueue: any[];
   // 请求限制最大数
   requestLimit: number;
-  // 请求超时时间(ms)
-  requestTimeout: number;
   // 请求重试限制最大数
   retryLimit: number;
   // 请求重试的原请求id

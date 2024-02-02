@@ -102,9 +102,9 @@ export interface EventHooksType {
   originalPage: (any: any) => any;
   originalComponent: (any: any) => any;
   originalBehavior: (any: any) => any;
-  appEffects: (app: any, event: AppHookLifeCircle, args: any) => void;
-  pageEffects: (page: any, event: PageHookLifeCircle, args: any) => void;
-  actionEffects: (event: EventTarget, method: string) => void;
+  appEffects: any;
+  pageEffects: any;
+  actionEffects: any;
   currentPage: MinipPageType;
   // 判断是否为非构造函数的一个函数
   isNormalFc: (key: string, method: any) => any;

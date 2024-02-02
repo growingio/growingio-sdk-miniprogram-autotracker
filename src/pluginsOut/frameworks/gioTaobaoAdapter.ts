@@ -2,7 +2,6 @@
  * 名称：淘宝小程序单发插件
  * 用途：用于提供淘宝小程序云函数和云应用的请求方法。
  */
-import { Event } from '@@/types/base';
 import { GrowingIOType } from '@@/types/growingIO';
 
 let ut;

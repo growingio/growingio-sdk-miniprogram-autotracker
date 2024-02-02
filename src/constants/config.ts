@@ -29,8 +29,8 @@ export const DEFAULT_SETTINGS = {
   performance: { type: 'object', default: { monitor: true, exception: true } },
   // 数据上报域名
   serverUrl: { type: 'string', default: 'https://napi.growingio.com' },
-  // 是否标记为分包
-  subpackage: { type: 'boolean', default: false },
+  // 请求超时时长
+  requestTimeout: { type: 'number', default: 5000 },
   // taro框架实例
   taro: { type: ['object', 'module'], default: false },
   // taro框架vue实例

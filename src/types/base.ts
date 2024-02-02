@@ -31,6 +31,8 @@ export interface UserOptions {
   keepAlive: number;
   // 性能采集配置
   performance?: { monitor: boolean; exception: boolean };
+  // 请求超时时长
+  requestTimeout?: number;
   // 数据上报域名
   serverUrl?: string;
   // 是否标记为分包

@@ -1,10 +1,8 @@
 import {
-  endsWith,
   isArray,
   isEmpty,
   startsWith,
   throttle,
-  toString,
   unset
 } from '@@/utils/glodash';
 import { Event } from '@@/types/base';
@@ -19,8 +17,6 @@ class Uploader implements UploaderType {
   public requestQueue: any[];
   // 请求限制最大数
   public requestLimit: number;
-  // 请求超时时间(ms)
-  public requestTimeout: number;
   // 请求重试限制最大数
   public retryLimit: number;
   // 请求重试的原请求id
@@ -34,7 +30,6 @@ class Uploader implements UploaderType {
     this.hoardingQueue = [];
     this.requestQueue = [];
     this.requestLimit = 3;
-    this.requestTimeout = 5000;
     this.retryLimit = 2;
     this.retryIds = {};
     this.requestingNum = 0;
@@ -95,10 +90,10 @@ class Uploader implements UploaderType {
         this.hoardingQueue = this.hoardingQueue.slice(50);
       } else {
         // 如果积压队列小于50，正常的请求队列就只截取补满50后剩下的事件
-        this.hoardingQueue = [];
         this.requestQueue = this.requestQueue.slice(
           50 - this.hoardingQueue.length
         );
+        this.hoardingQueue = [];
       }
     } else {
       this.hoardingQueue = [];
@@ -168,7 +163,7 @@ class Uploader implements UploaderType {
       header,
       method: 'POST',
       data: compressData,
-      timeout: this.requestTimeout,
+      timeout: vdsConfig.requestTimeout,
       fail: (result: any) => {
         if (![200, 204].includes(result.code)) {
           if (isArray(eventsQueue)) {

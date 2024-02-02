@@ -3,8 +3,8 @@
  * 用途：用于提供半自动浏览埋点事件的自动注册、参数检验构建和创建事件方法。
  */
 import { GrowingIOType } from '@@/types/growingIO';
-import { isEqualArray } from '@@/utils/glodash';
 import { hashCode } from '@@/utils/tools';
+import { isEmpty, isEqualArray, toString } from '@@/utils/glodash';
 
 let ut;
 class GioImpressionTracking {
@@ -68,13 +68,47 @@ class GioImpressionTracking {
     return isEqualArray(controlGroup, comparisonGroup);
   };
 
+  // 获取nodeId
+  getNodeId = (collectTarget: any) => {
+    const { gioPlatform } = this.growingIO;
+    switch (gioPlatform) {
+      case 'wx':
+      case 'qq':
+      case 'ks':
+      case 'jd':
+        return collectTarget.__wxExparserNodeId__; // wx page/component
+      case 'my':
+        return collectTarget.$page
+          ? `${collectTarget.$page.$id}-${collectTarget.$id}` //my component
+          : collectTarget.$id; // my page
+      case 'swan':
+        return collectTarget.route
+          ? toString(hashCode(collectTarget.route)) // swan page
+          : collectTarget.nodeId; // swan component
+      case 'tt':
+        return collectTarget.route
+          ? toString(hashCode(collectTarget.route)) // swan page
+          : collectTarget.__nodeId__; // swan component
+      default:
+        break;
+    }
+  };
+
   // 获取到可监听节点后校验节点信息
   rectobserve = (rect, collectTarget, optionKey) => {
-    const nodeId = collectTarget.__wxExparserNodeId__;
+    const { gioPlatform } = this.growingIO;
+    if (
+      (gioPlatform === 'tt' && collectTarget.__nodeId__) ||
+      (gioPlatform === 'ks' && collectTarget.is)
+    ) {
+      // 字节和快手小程序页面监听时可以拿到自定义组件一次性完成监听，所以组件的节点实例不再处理
+      return false;
+    }
+    const nodeId = this.getNodeId(collectTarget);
     const page = collectTarget.route
       ? collectTarget
       : this.growingIO.minipInstance.getCurrentPage();
-    // 监听的节点和上一次的不一致，或者监听的组件或页面的监听已经被注销时，可以继续生成新的监听
+    // 监听的目标页面和上一次的不一致，或者监听的组件或页面的监听已经被注销时，可以继续生成新的监听
     let observerNeedNew = false;
     if (page.route) {
       const isEqualRects = this.isEqualRects(rect, page.route, nodeId);
@@ -109,15 +143,21 @@ class GioImpressionTracking {
           ?.createSelectorQuery()
           .in(collectTarget);
     if (['ks', 'qq'].includes(gioPlatform)) {
-      query.selectAll('.growing_collect_imp').boundingClientRect(([rect]) => {
-        rect = ut.isNil(rect) || ut.isArray(rect) ? rect : [rect];
-        this.rectobserve(rect, collectTarget, optionKey);
-      });
+      query
+        .selectAll('.growing_collect_imp')
+        .boundingClientRect(([rect = []]) => {
+          rect = ut.isArray(rect) ? rect : [rect];
+          if (!isEmpty(rect)) {
+            this.rectobserve(rect, collectTarget, optionKey);
+          }
+        });
       query.exec();
     } else {
       query.selectAll('.growing_collect_imp').boundingClientRect();
       query.exec(([rect]) => {
-        this.rectobserve(rect, collectTarget, optionKey);
+        if (!isEmpty(rect)) {
+          this.rectobserve(rect, collectTarget, optionKey);
+        }
       });
     }
   };
@@ -136,8 +176,7 @@ class GioImpressionTracking {
     ) {
       observerOption.dataset = true;
     }
-
-    const nodeId = collectTarget.__wxExparserNodeId__;
+    const nodeId = this.getNodeId(collectTarget);
     let page = collectTarget;
     // uniapp是组件和页面一体，所以要分两次尝试监听；原生是组件和页面互相独立，按类型监听
     // 自定义组件是不能直接在页面上被拿到，所以直接监听页面不会监听到自定义组件
@@ -148,7 +187,6 @@ class GioImpressionTracking {
     ) {
       page = minipInstance.getCurrentPage();
     }
-
     if (!this.observerIds[page.route]) {
       this.observerIds[page.route] = {};
     }
@@ -158,13 +196,12 @@ class GioImpressionTracking {
       originObserver.disconnect();
     }
     // 创建一个新的监听
-    let observer =
-      gioPlatform === 'jd'
-        ? minipInstance.minip?.createIntersectionObserver(
-            collectTarget,
-            observerOption
-          )
-        : collectTarget.createIntersectionObserver(observerOption);
+    let observer = ['swan', 'jd'].includes(gioPlatform)
+      ? minipInstance.minip?.createIntersectionObserver(
+          collectTarget,
+          observerOption
+        )
+      : collectTarget.createIntersectionObserver(observerOption);
     observer = observer.relativeToViewport();
     // 不管原先是否创建过，直接覆盖（obeserverId会更新）
     this.observerIds[page.route][nodeId] = observer;
@@ -193,7 +230,6 @@ class GioImpressionTracking {
           }
         }
         if (dataProperties.eventId) {
-          // 要直接构建custom事件，不要去调用埋点插件的方法，万一插件没有加载就发不出去了
           this.buildImpEvent(dataProperties);
         } else {
           ut.consoleText(
@@ -288,8 +324,7 @@ class GioImpressionTracking {
       eventType: 'CUSTOM',
       eventName: eventId,
       attributes: properties,
-      ...eventContextBuilder(),
-      customEventType: 0
+      ...eventContextBuilder()
     };
     eventInterceptor(event);
   };

@@ -306,8 +306,7 @@ class GrowingIO implements GrowingIOType {
             ...attributes,
             event_duration: tracker.leng > maxEnd ? 0 : tracker.leng / 1000
           }),
-          ...eventContextBuilder(),
-          customEventType: 0
+          ...eventContextBuilder()
         };
         eventInterceptor(event);
         this.removeTimer(timerId);

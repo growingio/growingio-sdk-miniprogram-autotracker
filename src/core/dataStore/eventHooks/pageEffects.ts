@@ -1,6 +1,8 @@
 import { get, isEmpty, isFunction, unset } from '@@/utils/glodash';
 import { GrowingIOType } from '@@/types/growingIO';
+import { niceTry } from '@@/utils/tools';
 import { PageHookLifeCircle } from '@@/types/eventHooks';
+import EMIT_MSG from '@@/constants/emitMsg';
 
 class PageEffects {
   public buildTabClickEvent: (tabItem: any) => void;
@@ -20,6 +22,8 @@ class PageEffects {
       vdsConfig,
       platformConfig,
       dataStore: {
+        getTrackerVds,
+        trackersExecute,
         shareOut,
         eventHooks,
         toggleShareOut,
@@ -45,7 +49,7 @@ class PageEffects {
     }
     const path =
       page.route || page.uri || page.__route__ || page?.$page?.fullPath || '';
-    emitter.emit('minipLifecycle', {
+    emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
       event: `Page ${event}`,
       timestamp: eventTime,
       params: { page, args: args[0] }
@@ -56,7 +60,7 @@ class PageEffects {
     this.prevEvent[event] = Date.now();
     const pageListeners = platformConfig.listeners.page;
     // 向插件广播事件
-    emitter.emit('onComposeBefore', {
+    emitter.emit(EMIT_MSG.ON_COMPOSE_BEFORE, {
       page,
       event: `Page ${event}`,
       params: { page, args: args[0] }
@@ -84,18 +88,26 @@ class PageEffects {
             currentPage.path = `/插件${vdsConfig.appId}}`;
             currentPage.title = `/插件${vdsConfig.appId}}`;
           }
-          this.buildPageEvent();
+          trackersExecute((trackingId: string) => {
+            const { trackPage } = getTrackerVds(trackingId);
+            if (trackPage) {
+              this.buildPageEvent(trackingId);
+            }
+          });
         } else if (!shareOut || !eventHooks.currentPage.time) {
           // 不是因为分享切出再返回的onshow（视为第一次进入改页面）和切出去以后因为超时或者进入的场景值不一致时（会在appshow清掉页面时间），发page
           currentPage.parsePage(page, this.argQuery[path]);
           // 超时进入页面时前后path一致parsePage方法不会重置页面时间，可能会没有值，所以要补充重设一次
           eventHooks.currentPage.time = Date.now();
-          this.buildPageEvent();
+          trackersExecute((trackingId: string) => {
+            const { trackPage } = getTrackerVds(trackingId);
+            if (trackPage) {
+              this.buildPageEvent(trackingId);
+            }
+          });
         }
         // 分享标记置为false
         toggleShareOut(false);
-        // 保存分享id（记录是从哪个用户id的分享来的）
-        currentPage.saveShareId(this.argQuery[path]);
         break;
       }
       case pageListeners.pageHide:
@@ -104,19 +116,30 @@ class PageEffects {
       }
       case pageListeners.shareApp: {
         toggleShareOut(true);
-        if (vdsConfig.followShare) {
-          buildAppMessageEvent(args);
-        }
+        trackersExecute((trackingId: string) => {
+          const { followShare } = getTrackerVds(trackingId);
+          if (followShare) {
+            buildAppMessageEvent(trackingId, args);
+          }
+        });
         break;
       }
       case pageListeners.shareTime: {
-        if (vdsConfig.followShare) {
-          buildTimelineEvent(args);
-        }
+        trackersExecute((trackingId: string) => {
+          const { followShare } = getTrackerVds(trackingId);
+          if (followShare) {
+            buildTimelineEvent(trackingId, args);
+          }
+        });
         break;
       }
       case pageListeners.addFavorites: {
-        buildAddFavorites(args);
+        trackersExecute((trackingId: string) => {
+          const { followShare } = getTrackerVds(trackingId);
+          if (followShare) {
+            buildAddFavorites(trackingId, args);
+          }
+        });
         break;
       }
       case pageListeners.tabTap: {
@@ -127,7 +150,7 @@ class PageEffects {
           buildTabClickEvent &&
           isFunction(buildTabClickEvent)
         ) {
-          buildTabClickEvent(args[0]);
+          buildTabClickEvent(this.growingIO.trackingId, args[0]);
         }
         break;
       }
@@ -136,30 +159,41 @@ class PageEffects {
     }
     // 页面销毁移除当前页面的属性
     if (event === pageListeners.pageUnload) {
-      currentPage.pageProps[path] = undefined;
+      trackersExecute((trackingId: string) => {
+        currentPage.pageProps[trackingId] = undefined;
+      });
     }
   };
 
   // 构建页面访问事件
-  buildPageEvent = (props?: any) => {
+  buildPageEvent = (trackingId: string, props?: any) => {
     const {
-      dataStore: { eventContextBuilder, eventInterceptor, eventHooks }
+      dataStore: {
+        eventContextBuilder,
+        eventInterceptor,
+        eventHooks: { currentPage }
+      },
+      minipInstance
     } = this.growingIO;
-    const { currentPage } = eventHooks;
     const event = {
       eventType: 'PAGE',
-      referralPage: currentPage.getReferralPage(),
-      ...eventContextBuilder(),
+      referralPage: currentPage.getReferralPage(trackingId),
+      ...eventContextBuilder(trackingId),
+      // page事件要单独设一个title以覆盖eventContextBuilder中的lastPage的title错误值
+      title:
+        currentPage?.title ||
+        minipInstance.getPageTitle(minipInstance.getCurrentPage()),
       timestamp: currentPage.time
     };
-    // 添加页面属性
-    if (!isEmpty(currentPage.pageProps[event.path])) {
-      event.attributes = currentPage.pageProps[event.path];
+    // 传入参数生成的page事件取值为传入参数
+    if (!isEmpty(props) && props.title) {
+      event.title = props.title;
     }
-    if (!isEmpty(props) && props.path) {
-      event.path = props.path;
-      event.query = props.query;
-      event.title = props.title ?? event.title;
+    // 添加页面属性
+    const pageProps = niceTry(() => currentPage.pageProps[trackingId]);
+    if (!isEmpty(pageProps)) {
+      event.attributes = pageProps;
+      currentPage.pageProps[trackingId] = undefined;
     }
     eventInterceptor(event);
   };

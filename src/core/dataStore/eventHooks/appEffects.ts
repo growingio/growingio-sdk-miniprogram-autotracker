@@ -10,6 +10,7 @@ import {
   isNil
 } from '@@/utils/glodash';
 import { qsStringify } from '@@/utils/tools';
+import EMIT_MSG from '@@/constants/emitMsg';
 
 class AppEffects {
   constructor(public growingIO: GrowingIOType) {}
@@ -24,14 +25,15 @@ class AppEffects {
       uploader,
       dataStore,
       dataStore: {
+        trackersExecute,
         shareOut,
-        keepAlive,
         lastCloseTime,
         eventHooks,
-        saveStorageInfo
+        saveStorageInfo,
+        setOriginalSource
       }
     }: GrowingIOType = this.growingIO;
-    emitter.emit('minipLifecycle', {
+    emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
       event: `App ${event}`,
       timestamp: eventTime,
       params: args[0] ?? {}
@@ -41,7 +43,7 @@ class AppEffects {
     }
     const appListeners = platformConfig.listeners.app;
     // 向插件广播事件
-    emitter.emit('onComposeBefore', {
+    emitter.emit(EMIT_MSG.ON_COMPOSE_BEFORE, {
       event: `App ${event}`,
       params: args[0] ?? {}
     });
@@ -54,25 +56,33 @@ class AppEffects {
         const { path, query } = this.enterParamsParse(args[0]);
         if (!shareOut && vdsConfig.originalSource) {
           // 保存初始来源信息
-          dataStore.setOriginalSource({ path, query });
+          trackersExecute((trackingId: string) => {
+            setOriginalSource(trackingId, { path, query });
+          });
         }
         // 以下条件均会被认为是一次新的访问
         // 没有关闭时间说明是新访问
         if (!lastCloseTime) {
           // 保存进入小程序的参数
-          this.growingIO.dataStore.lastVisitEvent = { path, query };
-          this.buildVisitEvent({ path, query });
+          dataStore.lastVisitEvent = { path, query };
+          trackersExecute((trackingId: string) => {
+            this.buildVisitEvent(trackingId, { path, query });
+          });
         } else if (
           // 两次打开间隔时间超过keepAlive设定(默认5分钟)
-          Date.now() - lastCloseTime > keepAlive ||
+          Date.now() - lastCloseTime > vdsConfig.keepAlive ||
           // 两次打开时的场景值不一样（即从不同的来源进入小程序）
           (dataStore.lastScene && dataStore.scene !== dataStore.lastScene)
         ) {
           // 重置sessionId
-          userStore.sessionId = '';
+          trackersExecute((trackingId: string) => {
+            userStore.setSessionId(trackingId);
+          });
           // 需要按自然逻辑发visit时，清掉pagetime，防止取值错误（会在page中重新生成）
           eventHooks.currentPage.time = undefined;
-          this.buildVisitEvent({ path, query });
+          trackersExecute((trackingId: string) => {
+            this.buildVisitEvent(trackingId, { path, query });
+          });
         }
         break;
       }
@@ -82,11 +92,14 @@ class AppEffects {
         dataStore.lastCloseTime = Date.now();
         saveStorageInfo();
         userStore.saveUserInfo();
-        this.buildCloseEvent();
-        // forceLogin不生效时强制把请求队列中的事件全部发送
-        if (!vdsConfig.forceLogin) {
-          uploader.initiateRequest(true);
-        }
+        trackersExecute((trackingId: string) => {
+          this.buildCloseEvent(trackingId);
+          // forceLogin不生效时强制把请求队列中的事件全部发送
+          if (!vdsConfig.forceLogin) {
+            uploader.initiateRequest(trackingId, true);
+          }
+        });
+
         break;
       }
       default:
@@ -173,45 +186,51 @@ class AppEffects {
   };
 
   // 构建访问事件
-  buildVisitEvent = (props: any) => {
-    const { dataStore, vdsConfig, minipInstance } = this.growingIO;
+  buildVisitEvent = (trackingId: string, props?: any) => {
     const {
-      originalSourceName,
-      getOriginalSource,
-      eventContextBuilder,
-      eventInterceptor
-    } = dataStore;
-    const originalSource = getOriginalSource();
+      dataStore: {
+        getOriginalSource,
+        eventContextBuilder,
+        eventInterceptor,
+        eventHooks
+      },
+      minipInstance,
+      vdsConfig
+    } = this.growingIO;
+    const originalSource = getOriginalSource(trackingId);
     // 生命周期中调用构建使用参数赋值，补发场景调用构建使用上一次的值
     const query = props?.query || '';
     let event = {
       eventType: 'VISIT',
-      ...eventContextBuilder({
+      ...eventContextBuilder(trackingId, {
         // params.path是生命周期值或者是已有的值
         path: props?.path || '',
         // params.query是对象说明是生命周期调用，否则是补发调用
-        query: typeOf(query) === 'string' ? query : qsStringify(query)
+        query: typeOf(query) === 'string' ? query : qsStringify(query),
+        // visit事件要单独设一次title以覆盖eventContextBuilder中的lastPage的可能的title错误值
+        title:
+          eventHooks.currentPage?.title ||
+          minipInstance.getPageTitle(minipInstance.getCurrentPage()),
+        timestamp: eventHooks.currentPage.time
+          ? eventHooks.currentPage.time - 1
+          : +Date.now()
       })
     };
     // 配置使用初始来源时，visit使用初始来源数据
     if (vdsConfig.originalSource && !isNil(originalSource)) {
       event = { ...event, ...originalSource };
-      // 采集开关开启状态下的第一个visit消费过初始来源信息后删除
-      if (vdsConfig.dataCollect) {
-        minipInstance.removeStorageSync(originalSourceName);
-      }
     }
     eventInterceptor(event);
   };
 
   // 构建关闭事件
-  buildCloseEvent = () => {
+  buildCloseEvent = (trackingId: string) => {
     const {
       dataStore: { eventContextBuilder, eventInterceptor }
     } = this.growingIO;
     const event = {
       eventType: 'APP_CLOSED',
-      ...eventContextBuilder()
+      ...eventContextBuilder(trackingId)
     };
     eventInterceptor(event);
   };

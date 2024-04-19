@@ -11,8 +11,6 @@ class MinipPage implements MinipPageType {
   public title: string;
   // 通过调用wx.setNavigationBarTitle设置的title
   public settedTitle: any;
-  // 当前页面参数中的分享id
-  public queryShareId: string;
   // 页面级属性
   public pageProps: any;
   // 上一个执行的小程序生命周期
@@ -56,22 +54,15 @@ class MinipPage implements MinipPageType {
   };
 
   // 获取上一个页面路径
-  getReferralPage = () => {
+  getReferralPage = (trackingId: string) => {
     const {
       minipInstance,
       dataStore: { lastPageEvent, scene }
     } = this.growingIO;
     return (
-      lastPageEvent?.path ||
+      lastPageEvent[trackingId]?.path ||
       (scene ? `scn:${minipInstance.scnPrefix}${scene}` : null)
     );
-  };
-
-  // 保存分享id（记录是从哪个用户id的分享来的）
-  saveShareId = (query: any) => {
-    if (query?.gioShareId) {
-      this.queryShareId = query.gioShareId;
-    }
   };
 
   // 处理分享参数

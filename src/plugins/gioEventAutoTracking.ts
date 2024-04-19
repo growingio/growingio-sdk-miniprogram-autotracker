@@ -2,9 +2,11 @@
  * 名称：无埋点插件
  * 用途：用于提供无埋点的事件构建方法。
  */
+import { ID_REG, SWAN_XID_REG, TARO_XID_REG } from '@@/constants/regex';
 import { EventTarget } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
 import { consoleText, isTaro3 } from '@@/utils/tools';
+import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
 class GioEventAutoTracking {
@@ -15,8 +17,13 @@ class GioEventAutoTracking {
   }
 
   main = (e: EventTarget, eventName: string) => {
-    const { vdsConfig, platformConfig, plugins, emitter }: GrowingIOType =
-      this.growingIO;
+    const {
+      vdsConfig,
+      platformConfig,
+      plugins,
+      emitter,
+      trackingId
+    }: GrowingIOType = this.growingIO;
     if (
       // 无埋点事件拦截
       !vdsConfig.autotrack ||
@@ -49,15 +56,15 @@ class GioEventAutoTracking {
       console.log('Action：', e.type, Date.now());
     }
     // 向其他插件广播事件
-    emitter.emit('onComposeBefore', {
+    emitter.emit(EMIT_MSG.ON_COMPOSE_BEFORE, {
       event: eventName,
       params: e ?? {}
     });
     const actionListeners = platformConfig.listeners.actions;
     if (actionListeners.click.includes(e.type)) {
-      this.buildClickEvent(e, eventName);
+      this.buildClickEvent(trackingId, e, eventName);
     } else if (actionListeners.change.includes(e.type)) {
-      this.buildChangeEvent(e, eventName);
+      this.buildChangeEvent(trackingId, e, eventName);
     }
   };
 
@@ -68,8 +75,8 @@ class GioEventAutoTracking {
     let id = target.id;
     if (
       !id ||
-      (gioPlatform === 'swan' && /^_[0-9a-f]+/.test(id)) ||
-      (isTaro3(vdsConfig.taro) && /^_n_[0-9]+$/.test(id))
+      (gioPlatform === 'swan' && SWAN_XID_REG.test(id)) ||
+      (isTaro3(vdsConfig.taro) && TARO_XID_REG.test(id))
     ) {
       id = '';
     }
@@ -77,7 +84,7 @@ class GioEventAutoTracking {
   };
 
   // 构建点击事件
-  buildClickEvent = (e: EventTarget, eventName: string) => {
+  buildClickEvent = (trackingId: string, e: EventTarget, eventName: string) => {
     const xpath = this.getNodeXpath(e, eventName);
     if (xpath) {
       const {
@@ -87,11 +94,7 @@ class GioEventAutoTracking {
       let idx;
       if (ut.has(target?.dataset, 'index') && target?.dataset?.index !== '') {
         const index: any = ut.toString(target.dataset.index);
-        if (
-          /^\d{1,10}$/.test(index) &&
-          index - 0 > 0 &&
-          index - 0 < 2147483647
-        ) {
+        if (ID_REG.test(index) && index - 0 > 0 && index - 0 < 2147483647) {
           idx = +index;
         } else {
           consoleText(
@@ -110,14 +113,14 @@ class GioEventAutoTracking {
             hyperlink: target?.dataset?.src
           }
         ],
-        ...eventContextBuilder()
+        ...eventContextBuilder(trackingId)
       };
       eventInterceptor(event);
     }
   };
 
   // 构建tab菜单点击事件
-  buildTabClickEvent = (tabItem: any) => {
+  buildTabClickEvent = (trackingId: string, tabItem: any) => {
     const {
       dataStore: { eventContextBuilder, eventInterceptor }
     } = this.growingIO;
@@ -131,13 +134,17 @@ class GioEventAutoTracking {
           hyperlink: ut.toString(tabItem.pagePath)
         }
       ],
-      ...eventContextBuilder()
+      ...eventContextBuilder(trackingId)
     };
     eventInterceptor(event);
   };
 
   // 构建表单变化事件
-  buildChangeEvent = (e: EventTarget, eventName: string) => {
+  buildChangeEvent = (
+    trackingId: string,
+    e: EventTarget,
+    eventName: string
+  ) => {
     const xpath = this.getNodeXpath(e, eventName);
     if (xpath) {
       const {
@@ -147,7 +154,7 @@ class GioEventAutoTracking {
       const event = {
         eventType: 'VIEW_CHANGE',
         element: { xpath },
-        ...eventContextBuilder()
+        ...eventContextBuilder(trackingId)
       };
       const ev = ut.get(e, 'detail.value') || ut.get(e, 'target.attr.value');
       if (target?.dataset?.growingTrack || target?.dataset?.growingtrack) {

@@ -1,21 +1,26 @@
 // @ts-nocheck
 import { babel } from '@rollup/plugin-babel';
 import { version } from './package.json';
+import { terser } from 'rollup-plugin-terser';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import filesize from 'rollup-plugin-filesize';
 import path from 'path';
 import replace from '@rollup/plugin-replace';
 import resolve from '@rollup/plugin-node-resolve';
-import terser from '@rollup/plugin-terser';
 import typescript from '@rollup/plugin-typescript';
 
 const processENV = process.argv[process.argv.length - 1]
   .split('-')
   .filter((o) => o);
 
+// 小程序平台
 const platform = processENV[0];
+// 框架平台
 const frameName = processENV[1];
+// 插件实例的入口名
+const pluginInstanceName = frameName || platform === 'tb' ? frameName || platform : 'base';
+// 小程序平台文件名枚举
 const PLATFORMS = {
   wx: 'wechat',
   my: 'alipay',
@@ -30,10 +35,9 @@ const PLATFORMS = {
 
 // 控制台打印当前打包的环境和小程序平台
 console.log(
-  `Packaging ${
-    PLATFORMS[platform]
-      ? 'platform：' + PLATFORMS[platform]
-      : 'framework：' + frameName
+  `Packaging ${PLATFORMS[platform]
+    ? 'platform：' + PLATFORMS[platform]
+    : 'framework：' + frameName
   }`
 );
 
@@ -56,7 +60,8 @@ const config = {
       __GIO_PLATFORM__: PLATFORMS[platform] ? platform : 'framework',
       __GIO_FRAMEWORK__: PLATFORMS[platform] ? 'native' : frameName,
       __GIO_PLATFORM_CONFIG__: `@@/platformConfig/${platform}.ts`,
-      __GIO_PLATFORM_INSTANCE__: `@@/minipInstance/${platform}.ts`
+      __GIO_PLATFORM_INSTANCE__: `@@/minipInstance/${platform}.ts`,
+      __GIO_PLUGIN_INSTANCE__: `@@/core/pluginsInstance/${pluginInstanceName}.ts`
     }),
     alias({
       entries: {

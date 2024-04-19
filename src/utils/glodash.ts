@@ -96,12 +96,15 @@ export const dropWhile = (o: any, fn: (currentValue: any) => boolean): any => {
  * @param o array
  * @returns new array
  */
-export const compact = (o: any): any => {
+export const compact = (o: any, ignoreZero = false): any => {
   if (isArray(o)) {
     let resIndex = 0;
     const result: any = [];
     for (const value of o) {
       if (value && !isEmpty(value)) {
+        result[resIndex++] = value;
+      }
+      if (ignoreZero && value === 0) {
         result[resIndex++] = value;
       }
     }
@@ -191,8 +194,12 @@ export const upperFirst = (s: any): string | any => {
  * @param target string
  * @returns boolean
  */
-export const startsWith = (s: string, target: string): boolean =>
-  s.slice(0, target.length) === target;
+export const startsWith = (s: string, target: string): boolean => {
+  if (!isString(s)) {
+    s = toString(s);
+  }
+  return s.slice(0, target.length) === target;
+};
 
 /**
  * 判断字符串是否以指定字符结尾

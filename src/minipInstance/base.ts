@@ -8,6 +8,7 @@ import {
 } from '@@/types/minipInstance';
 import { PLATFORMS } from '@@/types/platforms';
 import { isFunction, isObject, isString, last } from '@@/utils/glodash';
+import EMIT_MSG from '@@/constants/emitMsg';
 import {
   limitString,
   niceTry,
@@ -32,7 +33,7 @@ class BaseInstance implements MinipInstanceType {
     } = this.growingIO;
     this.platform = platform;
     this.scnPrefix = scnPrefix;
-    this.growingIO.emitter.on('OPTION_INITIALIZED', () => {
+    this.growingIO.emitter.on(EMIT_MSG.OPTION_INITIALIZED, () => {
       this.getNetworkType().then(() =>
         this.growingIO.dataStore?.eventReleaseInspector()
       );

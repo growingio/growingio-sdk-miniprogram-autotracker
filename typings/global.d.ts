@@ -46,6 +46,11 @@ declare module "__GIO_PLATFORM_INSTANCE__" {
   export default module;
 }
 
+declare module "__GIO_PLUGIN_INSTANCE__" {
+  let module: any;
+  export default module;
+}
+
 declare module "@system.app" {
   let module: any;
   export default module;

@@ -7,10 +7,15 @@ import {
   isEmpty,
   isNaN,
   isNumber,
+  isObject,
+  isString,
+  keys,
   startsWith,
   toString
 } from '@@/utils/glodash';
 import { consoleText, hashCode, niceCallback } from '@@/utils/tools';
+import EMIT_MSG from '@@/constants/emitMsg';
+import { ABTEST_DATA_REG, ABTEST_SIGN_REG } from '@@/constants/regex';
 
 class GioABTest {
   // 请求间隔时长
@@ -18,18 +23,29 @@ class GioABTest {
   // 请求超时时长
   public requestTimeout: number;
   // 分流服务请求地址
-  public url: string;
+  public url: any;
   // 接口重试计数
   public retryCount: number;
   constructor(public growingIO: GrowingIOType, options: any) {
-    const { abServerUrl, requestInterval, requestTimeout } = options ?? {};
+    const {
+      abServerUrl = 'https://ab.growingio.com',
+      requestInterval,
+      requestTimeout
+    } = options ?? {};
     this.timeoutCheck(requestInterval, requestTimeout);
     const { emitter } = this.growingIO;
     this.growingIO.getABTest = this.getABTest;
-    emitter.on('OPTION_INITIALIZED', () => {
-      if (abServerUrl) {
+    emitter.on(EMIT_MSG.OPTION_INITIALIZED, () => {
+      if (!isEmpty(abServerUrl)) {
         this.abtStorageCheck();
-        this.generateUrl(abServerUrl);
+        this.url = {};
+        if (isString(abServerUrl)) {
+          this.generateUrl(this.growingIO.trackingId, abServerUrl);
+        } else if (isObject(abServerUrl)) {
+          keys(abServerUrl).forEach((trackingId: string) => {
+            this.generateUrl(trackingId, abServerUrl[trackingId]);
+          });
+        }
       } else {
         consoleText(
           '如果您需要使用ABTest功能，请配置服务地址 abServerUrl!',
@@ -47,16 +63,16 @@ class GioABTest {
   ) => {
     this.requestInterval =
       isNumber(Number(requestInterval)) &&
-      !isNaN(Number.parseInt(requestInterval as string, 10))
-        ? Number.parseInt(requestInterval as string, 10)
+      !isNaN(Number(requestInterval as string))
+        ? Number(requestInterval as string)
         : 5;
     if (this.requestInterval > 60 * 24 || this.requestInterval < 0) {
       this.requestInterval = 5;
     }
     this.requestTimeout =
       isNumber(Number(requestTimeout)) &&
-      !isNaN(Number.parseInt(requestTimeout as string, 10))
-        ? Number.parseInt(requestTimeout as string, 10)
+      !isNaN(Number(requestTimeout as string))
+        ? Number(requestTimeout as string)
         : 1000;
     if (this.requestTimeout > 5000 || this.requestTimeout < 100) {
       this.requestTimeout = 1000;
@@ -68,7 +84,7 @@ class GioABTest {
     const { minipInstance }: any = this.growingIO;
     const storageKeys = minipInstance.minip?.getStorageInfoSync().keys || [];
     // 请求标记
-    const abtsKeys = storageKeys.filter((k) => /^\d+_gdp_abt_sign$/.test(k));
+    const abtsKeys = storageKeys.filter((k) => ABTEST_SIGN_REG.test(k));
     abtsKeys.forEach((k) => {
       // 移除过期的数据，防止存储超限
       const sign = minipInstance.getStorageSync(k);
@@ -77,7 +93,7 @@ class GioABTest {
       }
     });
     // abtest数据
-    const abtdKeys = storageKeys.filter((k) => /^\d+_gdp_abtd$/.test(k));
+    const abtdKeys = storageKeys.filter((k) => ABTEST_DATA_REG.test(k));
     abtdKeys.forEach((k) => {
       // 移除过期的数据，防止存储超限
       if (isEmpty(minipInstance.getStorageSync(k))) {
@@ -87,28 +103,31 @@ class GioABTest {
   };
 
   // 生成存储的hash key
-  getHashKey = (layerId: string | number) => {
+  getHashKey = (trackingId: string, layerId: string | number) => {
     const {
-      userStore: { uid },
+      userStore: { getUid },
       vdsConfig: { projectId }
     } = this.growingIO;
-    return Math.abs(hashCode(`${projectId}#${uid}#${layerId}`));
+    return hashCode(`${trackingId}#${projectId}#${getUid()}#${layerId}`, true);
   };
 
   // 生成数据接口地址
-  generateUrl = (abServerUrl: string) => {
+  generateUrl = (trackingId: string, abServerUrl: string) => {
     if (!startsWith(abServerUrl, 'http')) {
-      this.url = `https://${abServerUrl}/diversion/specified-layer-variables`;
+      this.url[
+        trackingId
+      ] = `https://${abServerUrl}/diversion/specified-layer-variables`;
     } else {
-      this.url = `${abServerUrl}/diversion/specified-layer-variables`;
+      this.url[
+        trackingId
+      ] = `${abServerUrl}/diversion/specified-layer-variables`;
     }
   };
 
   // 获取实验调用
-  getABTest = (layerId: string | number, callback: any) => {
-    if (!this.url) {
-      niceCallback(callback, {});
-      return;
+  getABTest = (trackingId: string, layerId: string | number, callback: any) => {
+    if (isEmpty(this.url[trackingId])) {
+      this.generateUrl(trackingId, 'https://ab.growingio.com');
     }
     if (!layerId) {
       consoleText('获取ABTest数据失败! 实验层Id不合法!', 'error');
@@ -119,15 +138,16 @@ class GioABTest {
     // 接口调用的超时时间
     const abtSign =
       minipInstance.getStorageSync(
-        `${this.getHashKey(layerId)}_gdp_abt_sign`
+        `${this.getHashKey(trackingId, layerId)}_gdp_abt_sign`
       ) || 0;
     // 没有超时尝试取数据
     const abtData =
-      minipInstance.getStorageSync(`${this.getHashKey(layerId)}_gdp_abtd`) ||
-      {};
+      minipInstance.getStorageSync(
+        `${this.getHashKey(trackingId, layerId)}_gdp_abtd`
+      ) || {};
     // 没有有效数据或者接口请求标记超时则从调用分流服务获取数据
     if (!abtSign || abtSign < Date.now()) {
-      this.initiateRequest(layerId, abtData, callback);
+      this.initiateRequest(trackingId, layerId, abtData, callback);
     } else {
       niceCallback(callback, abtData);
     }
@@ -135,30 +155,36 @@ class GioABTest {
 
   // 发起请求
   initiateRequest = (
+    trackingId: string,
     layerId: string | number,
     originData: any,
     callback: any
   ) => {
     const {
-      userStore: { uid },
-      vdsConfig: { projectId, dataSourceId },
+      userStore: { getUid },
+      dataStore,
       minipInstance
     } = this.growingIO;
-
+    const { projectId, dataSourceId } = dataStore.getTrackerVds(trackingId);
     minipInstance.request({
-      url: this.url,
+      url: this.url[trackingId],
       header: { 'Content-Type': 'application/x-www-form-urlencoded' },
       method: 'POST',
       data: {
         accountId: projectId,
         datasourceId: dataSourceId,
-        distinctId: uid,
+        distinctId: getUid(),
         layerId
       },
       timeout: this.requestTimeout,
       success: ({ data }: any) => {
         if (data.code === 0) {
-          this.experimentVerify({ ...data, layerId }, originData, callback);
+          this.experimentVerify(
+            trackingId,
+            { ...data, layerId },
+            originData,
+            callback
+          );
         } else {
           consoleText(`获取ABTest数据失败! ${data.errorMsg}!`, 'error');
           // 接口业务失败返回false信息
@@ -166,7 +192,7 @@ class GioABTest {
         }
         // 接口调用返回后刷新接口调用标记
         minipInstance.setStorageSync(
-          `${this.getHashKey(layerId)}_gdp_abt_sign`,
+          `${this.getHashKey(trackingId, layerId)}_gdp_abt_sign`,
           Date.now() + 1000 * 60 * this.requestInterval
         );
       },
@@ -179,7 +205,7 @@ class GioABTest {
         } else {
           // 其他失败情况重试
           if (this.retryCount < 2) {
-            this.initiateRequest(layerId, originData, callback);
+            this.initiateRequest(trackingId, layerId, originData, callback);
             this.retryCount += 1;
           } else {
             consoleText(
@@ -195,9 +221,14 @@ class GioABTest {
   };
 
   // 实验校验（决定是否上报命中事件）
-  experimentVerify = (responseData: any, originData: any, callback: any) => {
+  experimentVerify = (
+    trackingId: string,
+    responseData: any,
+    originData: any,
+    callback: any
+  ) => {
     const { layerId, strategyId, experimentId, variables } = responseData;
-    const abtDataKey = `${this.getHashKey(layerId)}_gdp_abtd`;
+    const abtDataKey = `${this.getHashKey(trackingId, layerId)}_gdp_abtd`;
     const abtData = {
       layerId: toString(layerId),
       strategyId: toString(strategyId),
@@ -221,6 +252,7 @@ class GioABTest {
       // 数据不一致重新发命中埋点
       if (strategyId && experimentId) {
         this.buildExperimentHitEvent(
+          trackingId,
           toString(layerId),
           toString(experimentId),
           toString(strategyId)
@@ -232,7 +264,12 @@ class GioABTest {
   };
 
   // 构建实验命中事件
-  buildExperimentHitEvent = (layerId, experimentId, strategyId) => {
+  buildExperimentHitEvent = (
+    trackingId: string,
+    layerId: string,
+    experimentId: string,
+    strategyId: string
+  ) => {
     const {
       dataStore: { eventContextBuilder, eventConverter }
     } = this.growingIO;
@@ -244,7 +281,7 @@ class GioABTest {
         $exp_id: experimentId,
         $exp_strategy_id: strategyId
       },
-      ...eventContextBuilder(),
+      ...eventContextBuilder(trackingId),
       customEventType: 0
     };
     eventConverter(event);

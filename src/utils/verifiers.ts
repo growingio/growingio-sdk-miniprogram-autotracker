@@ -1,9 +1,9 @@
 /**
  * 代码中一些通用的或者业务上的校验器
  */
-import { GrowingIOType } from '@@/types/growingIO';
-import { compact, isNumber, isObject, isString, last } from '@@/utils/glodash';
 import { consoleText } from '@@/utils/tools';
+import { GrowingIOType } from '@@/types/growingIO';
+import { isNumber, isString, toString } from '@@/utils/glodash';
 
 /**
  * 一些id的合法性校验
@@ -18,59 +18,34 @@ export const verifyId = (o: string | number) =>
  * 初始化时的一些合法性校验
  */
 
-export const initPreCheck = (growingIO: GrowingIOType) => {
-  // 重复初始化校验
-  if (growingIO.vdsConfig || growingIO.gioSDKInitialized) {
+export const initialCheck = (growingIO: GrowingIOType, args: any) => {
+  // ?重复初始化由init方法内部判断
+  const projectId = toString(args[0]);
+  const dataSourceId = toString(args[1]);
+  // 参数为空校验
+  const userOptions = (args.length === 4 ? args[3] : args[2]) || {};
+  if (!projectId || !dataSourceId) {
     consoleText(
-      'SDK重复初始化，请检查是否重复加载SDK或接入其他平台SDK导致冲突!',
-      'warn'
-    );
-    return false;
-  }
-  return true;
-};
-
-// 参数为空校验
-export const paramsEmptyCheck = (args: any) => {
-  if (!compact(args)) {
-    consoleText(
-      'SDK初始化失败，请使用 gdp("init", "您的GrowingIO项目 accountId", "您项目的 dataSourceId", "你的应用 AppId", options); 进行初始化!',
+      'SDK初始化失败，请使用 gdp("init", "您的GrowingIO项目 accountId", "您项目的 dataSourceId", "您的小程序 AppId（可选）", options: { host: "您的数据上报地址host" }); 进行初始化!',
       'error'
     );
     return false;
   }
-  return true;
-};
-
-// 基础参数校验（projectId、userOptions）
-export const paramsBaseCheck = (args: any) => {
-  const projectId: string = args[0];
-  let userOptions: object = last(args);
-  // 参数校验（projectId）
-  if (!verifyId(projectId)) {
-    consoleText('SDK初始化失败，accountId 参数不合法!', 'error');
+  const gioSDKInitialized = growingIO.dataStore.initializedTrackingIds.some(
+    (tid: string, index: number) => {
+      const vds =
+        index === 0 ? growingIO.vdsConfig : growingIO.subInstance[tid];
+      return vds.projectId === projectId && vds.dataSourceId === dataSourceId;
+    }
+  );
+  if (gioSDKInitialized) {
+    consoleText('SDK初始化失败，重复初始化，请检查初始化参数!', 'error');
     return false;
   }
-  // 参数校验（userOptions）
-  if (!isObject(userOptions) || !userOptions) {
-    userOptions = {};
-  }
-  return { projectId, userOptions };
-};
-
-// 额外的参数校验（校验dataSourceId、AppId）
-export const paramExtraCheck = (args: any) => {
-  // 参数校验（dataSourceId）
-  const dataSourceId: string = args[1];
-  let appId: any = args[2];
-  const options: any = last(args);
-  if (!dataSourceId || !isString(dataSourceId)) {
-    consoleText('SDK初始化失败，dataSourceId 参数不合法!', 'error');
-    return false;
-  }
-  if (!verifyId(appId)) {
-    consoleText('SDK初始化失败，appId 参数不合法!', 'error');
-    return false;
-  }
-  return { dataSourceId, appId, options };
+  return {
+    projectId,
+    dataSourceId,
+    appId: toString(args.length === 4 ? args[2] : ''),
+    userOptions
+  };
 };

@@ -1,7 +1,9 @@
 import {
+  ALLOW_SET_OPTIONS,
   DEFAULT_SETTINGS,
   EXTRA_INFO_PARAMS,
-  IGNORE_PARAMS
+  IGNORE_PARAMS,
+  STORAGE_KEYS
 } from '@@/constants/config';
 import {
   forEach,
@@ -14,7 +16,6 @@ import {
   isNil,
   isString,
   keys,
-  toString,
   typeOf,
   unset
 } from '@@/utils/glodash';
@@ -22,23 +23,26 @@ import {
   batchSetStorageSync,
   callError,
   consoleText,
-  getAppInst,
-  getSubKeys,
+  getGlobal,
   guid,
   niceTry
 } from '@@/utils/tools';
-import { DataStoreType, OriginOptions } from '@@/types/dataStore';
+import {
+  DataStoreType,
+  OriginOptions,
+  StorageKeyType
+} from '@@/types/dataStore';
+import { EXTEND_EVENT } from '@@/types/base';
 import { EventHooksType } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
+import EMIT_MSG from '@@/constants/emitMsg';
 import EventContextBuilder from './eventContextBuilder';
 import EventHooks from './eventHooks';
 
 class DataStore implements DataStoreType {
   readonly ALLOW_SETTING_KEYS = keys(DEFAULT_SETTINGS);
-  public gsidStorageName = '_growing_gsid_';
-  public originalSourceName = 'gdp_original_source';
-  public _gsid: number;
-  public _stid: number; // 用于判断每发送10个事件，往本地存储里同步一次gsid，减少存储的读写操作。
+  public _gsid: any;
+  public _stid: any; // 用于判断每发送10个事件，往本地存储里同步一次gsid，减少存储的读写操作。
   public eventHooks: EventHooksType;
   // 来源场景值
   public _scene: number | string;
@@ -48,10 +52,8 @@ class DataStore implements DataStoreType {
   public shareOut: boolean;
   // 上次小程序关闭时间
   public lastCloseTime: number;
-  // 保活时间(两次打开小程序间隔算为一次访问的时间)
-  public keepAlive: number;
   // 事件通用属性构建方法
-  public eventContextBuilder: (params?: any) => any;
+  public eventContextBuilder: (trackingId: string, params?: any) => any;
   // 上一个访问事件，保存最近的一次visit事件，存储一些设备系统信息，避免多次重新获取
   public lastVisitEvent: any;
   // 上一个页面事件，便于下一个Page事件获取数据
@@ -64,82 +66,107 @@ class DataStore implements DataStoreType {
   public trackTimers: any;
   // 被拦截的事件
   public interceptEvents: any;
+  // 记录已初始化的trackingId，以帮助判断是否再更新sessionId时是否需要发送事件
+  public initializedTrackingIds: string[];
 
   constructor(public growingIO: GrowingIOType) {
-    this.initStorageInfo();
+    this.initializedTrackingIds = [];
     this.eventContextBuilder = new EventContextBuilder(this.growingIO).main;
     this.eventHooks = new EventHooks(this.growingIO);
     this.shareOut = false;
+    this._gsid = {};
+    this._stid = {};
     this.lastVisitEvent = {};
     this.lastPageEvent = {};
     this.locationData = {};
     this.generalProps = {};
     this.trackTimers = {};
     this.interceptEvents = [];
-    // visit、page事件监听
-    this.growingIO.emitter.on('onComposeAfter', ({ composedEvent }) => {
-      if (composedEvent.eventType === 'VISIT' || composedEvent.t === 'vst') {
-        this.lastVisitEvent = composedEvent;
-      }
-      if (composedEvent.eventType === 'PAGE' || composedEvent.t === 'page') {
-        this.lastPageEvent = composedEvent;
-      }
+    const { emitter, minipInstance } = this.growingIO;
+    // sdk初始化完成记录trackingId
+    emitter.on(EMIT_MSG.SDK_INITIALIZED, ({ trackingId: initTrackingId }) => {
+      this.initializedTrackingIds.push(initTrackingId);
+      this.initStorageInfo(initTrackingId);
     });
+    // visit、page事件监听
+    emitter.on(
+      EMIT_MSG.ON_COMMIT_REQUEST,
+      ({ eventData: event, trackingId }) => {
+        if (event.eventType === 'VISIT') {
+          this.lastVisitEvent = event;
+        }
+        if (event.eventType === 'PAGE') {
+          this.lastPageEvent[trackingId] = event;
+        }
+      }
+    );
     // 小程序切后台把所有还在计时中的计时器记一次时长
-    if (isFunction(this.growingIO.minipInstance.minip?.onAppHide)) {
-      this.growingIO.minipInstance.minip.onAppHide(() => {
-        forEach(this.trackTimers, (tracker: any) => {
-          if (tracker.start) {
-            tracker.leng = tracker.leng + (+Date.now() - tracker.start);
-          }
+    if (isFunction(minipInstance.minip?.onAppHide)) {
+      minipInstance.minip.onAppHide(() => {
+        this.trackersExecute((trackingId: string) => {
+          const timers = this.trackTimers[trackingId];
+          forEach(timers, (timer: any) => {
+            if (timer.start) {
+              timer.leng = timer.leng + (+Date.now() - timer.start);
+            }
+          });
         });
       });
     }
-
     // 小程序切前台把所有还在计时中的计时器重置开始时间
-    if (isFunction(this.growingIO.minipInstance.minip?.onAppShow)) {
-      this.growingIO.minipInstance.minip.onAppShow(() => {
-        forEach(this.trackTimers, (tracker: any) => {
-          if (tracker.start) {
-            tracker.start = +Date.now();
-          }
+    if (isFunction(minipInstance.minip?.onAppShow)) {
+      minipInstance.minip.onAppShow(() => {
+        this.trackersExecute((trackingId: string) => {
+          const timers = this.trackTimers[trackingId];
+          forEach(timers, (timer: any) => {
+            if (timer.start) {
+              timer.start = +Date.now();
+            }
+          });
         });
       });
     }
     // 关闭数据采集时要移除所有的计时器
-    this.growingIO.emitter.on(
-      'OPTION_CHANGE',
-      ({ optionName, optionValue }) => {
-        if (optionName === 'dataCollect' && optionValue === false) {
-          this.growingIO.clearTrackTimer();
-        }
+    emitter.on(EMIT_MSG.OPTION_CHANGE, ({ optionName, optionValue }) => {
+      if (optionName === 'dataCollect' && optionValue === false) {
+        this.trackersExecute((trackingId: string) => {
+          this.growingIO.clearTrackTimer(trackingId);
+        });
       }
-    );
+    });
   }
 
-  // @ts-ignore
-  get gsid() {
-    const app = getAppInst();
-    const sKeys = getSubKeys(app);
-    return !isEmpty(sKeys) && app.gio_gsid ? app.gio_gsid : this._gsid;
-  }
+  // 获取存储key
+  getStorageKey = (trackingId: string, name: StorageKeyType) => {
+    const { inPlugin } = this.growingIO;
+    return `${trackingId === this.growingIO.trackingId ? '' : trackingId}${
+      STORAGE_KEYS[inPlugin ? 'plugin_' + name : name]
+    }`;
+  };
 
   // @ts-ignore
-  set gsid(v: any) {
-    const newV = Number.parseInt(v, 10);
-    if (Number.isNaN(newV) || v >= 1e9 || v < 1) {
-      this._gsid = 1;
+  getGsid = (trackingId: string) => {
+    let gsid = Number(this._gsid[trackingId]);
+    if (Number.isNaN(gsid) || gsid >= 1e9 || gsid < 1) {
+      this.setGsid(trackingId, 1);
+      return 1;
     } else {
-      this._gsid = v;
+      return gsid;
     }
-    // 在全局app中存一份gsid给分包用
-    const app = getAppInst();
-    app.gio_gsid = this._gsid;
+  };
+
+  // @ts-ignore
+  setGsid = (trackingId: string, value: any) => {
+    let gsid = Number(value);
+    if (Number.isNaN(gsid) || gsid >= 1e9 || gsid < 1) {
+      gsid = 1;
+    }
+    this._gsid[trackingId] = gsid;
     // _gsid每自增10次（即每发送10个事件）时，往本地存储里同步一次gsid
-    if (this._gsid - this._stid >= 10) {
+    if (this._gsid[trackingId] - this._stid[trackingId] >= 10) {
       this.saveStorageInfo();
     }
-  }
+  };
 
   get scene() {
     return this._scene;
@@ -149,7 +176,7 @@ class DataStore implements DataStoreType {
     const prevScene = this._scene;
     this._scene = v;
     if (prevScene !== this._scene) {
-      this.growingIO.emitter.emit('SCENE_UPDATE', {
+      this.growingIO.emitter.emit(EMIT_MSG.SCENE_UPDATE, {
         newScene: v,
         oldScene: prevScene
       });
@@ -157,125 +184,86 @@ class DataStore implements DataStoreType {
   }
 
   // 初始化gsid
-  initStorageInfo = () => {
+  initStorageInfo = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
-    const app = getAppInst();
-    // gsid
-    const gid = app.gio_gsid
-      ? app.gio_gsid
-      : Number.parseInt(minipInstance.getStorageSync(this.gsidStorageName), 10);
-    this._gsid = Number.isNaN(gid) || gid >= 1e9 || gid < 1 ? 1 : gid;
-    // 初始化时同步stid
-    this._stid = this._gsid;
-    if (gid !== this._gsid) {
-      minipInstance.setStorageSync(this.gsidStorageName, this._gsid);
+    const oriGsid = minipInstance.getStorageSync(
+      this.getStorageKey(trackingId, 'gsid')
+    );
+    let gsid = Number(oriGsid);
+    if (Number.isNaN(gsid) || gsid >= 1e9 || gsid < 1) {
+      gsid = 1;
+    }
+    this._gsid[trackingId] = gsid;
+    this._stid[trackingId] = gsid;
+    // 存储中的gsid不合法时要往存储写一次
+    if (gsid !== oriGsid) {
+      minipInstance.setStorageSync(
+        this.getStorageKey(trackingId, 'gsid'),
+        gsid
+      );
     }
   };
 
-  // 退出小程序时在存储中同步gsid信息
+  // 在存储中同步gsid信息
   saveStorageInfo = () => {
     const { minipInstance } = this.growingIO;
-    this._stid = this._gsid;
-    batchSetStorageSync(minipInstance, [
-      { key: this.gsidStorageName, value: this._gsid }
-    ]);
+    this._stid = { ...this._gsid };
+    batchSetStorageSync(
+      minipInstance,
+      this.initializedTrackingIds.map((trackingId: string) => ({
+        key: this.getStorageKey(trackingId, 'gsid'),
+        value: this._gsid[trackingId]
+      }))
+    );
   };
 
   // 保存初始来源信息
-  setOriginalSource = ({ path, query }) => {
+  setOriginalSource = (trackingId: string, { path, query }) => {
     const { minipInstance } = this.growingIO;
-    if (isNil(this.getOriginalSource())) {
+    if (isNil(this.getOriginalSource(trackingId))) {
       const originalSource = { path, query, title: '' };
       minipInstance.setStorageSync(
-        this.originalSourceName,
+        this.getStorageKey(trackingId, 'originalSource'),
         JSON.stringify(originalSource)
       );
     }
   };
 
   // 获取初始来源信息
-  getOriginalSource = () => {
+  getOriginalSource = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
     return niceTry(() =>
-      JSON.parse(minipInstance.getStorageSync(this.originalSourceName))
+      JSON.parse(
+        minipInstance.getStorageSync(
+          this.getStorageKey(trackingId, 'originalSource')
+        )
+      )
     );
   };
 
-  // 初始化全局配置
-  initOptions = (userOptions: OriginOptions) => {
-    const { projectId, dataSourceId, appId } = userOptions;
-    const vdsConfig: any = {};
-    // 只处理允许的配置项，之外用户的配置项无视
-    this.ALLOW_SETTING_KEYS.forEach((k) => {
-      // 配置项值不存在或类型不合法时置为默认值
-      const altp = DEFAULT_SETTINGS[k].type;
-      const invalid = isArray(altp)
-        ? !altp.includes(typeOf(userOptions[k]))
-        : typeOf(userOptions[k]) !== DEFAULT_SETTINGS[k].type;
-      if (invalid) {
-        vdsConfig[k] = DEFAULT_SETTINGS[k].default;
-      } else if (k === 'ignoreFields') {
-        vdsConfig.ignoreFields = userOptions.ignoreFields.filter((o) =>
-          IGNORE_PARAMS.includes(o)
-        );
-      } else if (k === 'extraParams') {
-        vdsConfig.extraParams = userOptions.extraParams.filter((o) =>
-          EXTRA_INFO_PARAMS.includes(o)
-        );
-      } else {
-        vdsConfig[k] = userOptions[k];
-      }
-    });
-    // 发送间隔不允许设置为小数，如果是小数则取整
-    vdsConfig.uploadInterval = Math.round(vdsConfig.uploadInterval);
-    // 设置发送间隔小于0或者大于2秒的都认为不合法，改回1秒
-    if (
-      Number.isNaN(vdsConfig.uploadInterval) ||
-      vdsConfig.uploadInterval < 0 ||
-      vdsConfig.uploadInterval > 2000
-    ) {
-      vdsConfig.uploadInterval = 1000;
-    }
-    // idMapping配置项兼容处理
-    if (vdsConfig.enableIdMapping && !vdsConfig.idMapping) {
-      vdsConfig.idMapping = true;
-    }
-    // 是否开启强制插件模式
-    if (vdsConfig.pluginMode) {
-      this.growingIO.inPlugin = true;
-    }
-    // 请求超时时长设置的合法区间校验，值小于等于0ms认为不合法，改回5秒，浏览器默认有2分钟的上限
-    if (
-      isNaN(Number(vdsConfig.requestTimeout)) ||
-      vdsConfig.requestTimeout <= 0
-    ) {
-      vdsConfig.requestTimeout = 5000;
-    }
-    this.growingIO.vdsConfig = {
-      ...vdsConfig,
-      projectId,
-      dataSourceId,
-      appId,
-      // 补充性能默认值
-      performance: {
-        monitor: vdsConfig.performance?.monitor ?? true,
-        exception: vdsConfig.performance?.exception ?? true,
-        network: vdsConfig.performance?.network ?? false
-      }
-    };
-    this.keepAlive = vdsConfig.keepAlive;
-    // 初始化配置提示
-    if (!vdsConfig.dataCollect) {
-      consoleText('已关闭数据采集', 'info');
-    }
-    if (!vdsConfig.autotrack) {
-      consoleText('已关闭无埋点', 'info');
-    }
-    const { plugins, inPlugin, minipInstance } = this.growingIO;
+  // 获取采集实例配置内容 //? 多实例插件会重写该方法
+  // eslint-disable-next-line
+  getTrackerVds = (trackingId: string): any =>
+    this.growingIO.trackingId === trackingId
+      ? { ...this.growingIO.vdsConfig }
+      : undefined;
+
+  // 初始化实例的配置项 // ?多实例插件会重写该方法
+  initTrackerOptions = (options: any) => {
+    const trackerOptions = this.initOptions(options);
+    trackerOptions.trackingId = options.trackingId;
+    this.growingIO.trackingId = options.trackingId;
+    this.growingIO.vdsConfig = trackerOptions;
+    return trackerOptions;
+  };
+
+  // 初始化实例的hooker // ?多实例插件会重写该方法
+  initTrackerHooker = (vdsConfig: OriginOptions) => {
+    const { platformConfig, inPlugin, minipInstance, plugins } = this.growingIO;
     const { uniVue, taro } = vdsConfig;
     // 如果是使用全量版本时，当前小程序不是框架的，要允许原生的hook
     if (!(uniVue || taro)) {
-      this.growingIO.platformConfig.canHook = true;
+      platformConfig.canHook = true;
     }
     // 初始化核心钩子（重写全局）
     if (!inPlugin || ['tbp', 'jdp'].includes(minipInstance.platform)) {
@@ -292,44 +280,106 @@ class DataStore implements DataStoreType {
     }
   };
 
+  // 初始化全局配置
+  initOptions = (userOptions: OriginOptions) => {
+    const { projectId, dataSourceId, appId, trackingId } = userOptions;
+    const configs: any = {};
+    // 只处理允许的配置项，之外用户的配置项无视
+    this.ALLOW_SETTING_KEYS.forEach((k) => {
+      // 配置项值不存在或类型不合法时置为默认值
+      const altp = DEFAULT_SETTINGS[k].type;
+      const invalid = isArray(altp)
+        ? !altp.includes(typeOf(userOptions[k]))
+        : typeOf(userOptions[k]) !== DEFAULT_SETTINGS[k].type;
+      if (invalid) {
+        configs[k] = DEFAULT_SETTINGS[k].default;
+      } else if (k === 'ignoreFields') {
+        configs.ignoreFields = userOptions.ignoreFields.filter((o) =>
+          IGNORE_PARAMS.includes(o)
+        );
+      } else if (k === 'extraParams') {
+        configs.extraParams = userOptions.extraParams.filter((o) =>
+          EXTRA_INFO_PARAMS.includes(o)
+        );
+      } else {
+        configs[k] = userOptions[k];
+        // 数据采集和无埋点采集关闭时给提示
+        if (['dataCollect', 'autotrack'].includes(k) && !configs[k]) {
+          consoleText(`已关闭${ALLOW_SET_OPTIONS[k]}`, 'info');
+        }
+      }
+    });
+    // 发送间隔不允许设置为小数，如果是小数则取整
+    configs.uploadInterval = Math.round(configs.uploadInterval);
+    // 设置发送间隔小于0或者大于3秒的都认为不合法，改回1秒
+    if (
+      Number.isNaN(configs.uploadInterval) ||
+      configs.uploadInterval < 0 ||
+      configs.uploadInterval > 3000
+    ) {
+      configs.uploadInterval = 1000;
+    }
+    // idMapping配置项兼容处理
+    if (configs.enableIdMapping && !configs.idMapping) {
+      configs.idMapping = true;
+      // 没有开启IDMapping的时候要把userKey清掉，防止之前有数被带到上报数据里
+      if (!configs.idMapping) {
+        this.growingIO.userStore.setUserKey(trackingId, '');
+      }
+    }
+    unset(configs, 'enableIdMapping');
+    // 是否开启强制插件模式
+    if (configs.pluginMode) {
+      this.growingIO.inPlugin = true;
+    }
+    // 请求超时时长设置的合法区间校验，值小于等于0ms认为不合法，改回5秒，浏览器默认有2分钟的上限
+    if (isNaN(Number(configs.requestTimeout)) || configs.requestTimeout <= 0) {
+      configs.requestTimeout = 5000;
+    }
+
+    return {
+      ...configs,
+      projectId,
+      dataSourceId,
+      appId,
+      trackingId,
+      // 补充性能默认值
+      performance: {
+        monitor: configs.performance?.monitor ?? true,
+        exception: configs.performance?.exception ?? true,
+        network: configs.performance?.network ?? false
+      }
+    };
+  };
+
   // 全局配置修改
-  setOption = (k: string, v: any) => {
-    const { vdsConfig, userStore, uploader, emitter } = this.growingIO;
+  setOption = (trackingId: string, k: string, v: any) => {
+    const { userStore, emitter } = this.growingIO;
+    const trakerVds = this.getTrackerVds(trackingId);
     // 检查 k
     const validKey = isString(k) && this.ALLOW_SETTING_KEYS.includes(k);
     const validValue = validKey && typeof v === DEFAULT_SETTINGS[k]?.type;
     if (validKey && validValue) {
+      const prevConfig = { ...trakerVds };
+      this.updateVdsConfig(trackingId, { ...trakerVds, [k]: v });
       // 从关闭到打开dataCollect时补发visit和page
-      if (
-        k === 'dataCollect' &&
-        vdsConfig.dataCollect === false &&
-        v === true
-      ) {
-        let t = setTimeout(() => {
-          userStore.sessionId = '';
-          const { path, query, settedTitle } = this.eventHooks.currentPage;
-          // 重新获取页面title，防止切换配置前修改了title没取到
-          this.eventHooks.currentPage.title =
-            settedTitle[path] ||
-            this.growingIO.minipInstance.getPageTitle(
-              this.growingIO.minipInstance.getCurrentPage()
-            );
-          // visit取当前页面值
-          this.sendVisit({ path, query });
-          // 要重设一次页面时间，防止比visit早
-          this.eventHooks.currentPage.time = Date.now();
-          this.sendPage({ path, query });
-          clearTimeout(t);
-          t = null;
-        }, 0);
-      }
-      vdsConfig[k] = v;
-      // 修改serverUrl时要重新生成上报地址
-      if (k === 'serverUrl') {
-        uploader?.generateURL();
+      if (k === 'dataCollect' && prevConfig.dataCollect !== v && v) {
+        userStore.setSessionId(trackingId);
+        const { path, query, settedTitle } = this.eventHooks.currentPage;
+        // 重新获取页面title，防止切换配置前修改了title没取到
+        this.eventHooks.currentPage.title =
+          settedTitle[path] ||
+          this.growingIO.minipInstance.getPageTitle(
+            this.growingIO.minipInstance.getCurrentPage()
+          );
+        // visit取当前页面值
+        this.sendVisit(trackingId, { path, query });
+        // 要重设一次页面时间，防止比visit早
+        this.eventHooks.currentPage.time = Date.now();
+        this.sendPage(trackingId, { path, query });
       }
       // 配置项有变更要全局广播
-      emitter.emit('OPTION_CHANGE', { optionName: k, optionValue: v });
+      emitter.emit(EMIT_MSG.OPTION_CHANGE, { optionName: k, optionValue: v });
       return true;
     } else {
       callError(`setOption > ${k}`);
@@ -338,15 +388,34 @@ class DataStore implements DataStoreType {
   };
 
   // 获取全局配置
-  getOption = (k?: string) => {
-    const { vdsConfig } = this.growingIO;
-    if (k && has(vdsConfig, toString(k))) {
-      return vdsConfig[toString(k)];
-    } else if (isNil(k)) {
-      return { ...vdsConfig };
+  getOption = (trackingId: string, k?: string) => {
+    const trakerVds = this.getTrackerVds(trackingId);
+    if (k && has(this.growingIO.vdsConfig, k)) {
+      if (has(trakerVds, k)) {
+        return trakerVds[k];
+      } else {
+        return this.growingIO.vdsConfig[k];
+      }
+    } else if (isEmpty(k)) {
+      return trakerVds;
     } else {
       callError(`getOption > ${k}`);
       return undefined;
+    }
+  };
+
+  // 根据实例更新内存和存储中的vds配置项值
+  updateVdsConfig = (trackingId: string, vds: any) => {
+    if (trackingId === this.growingIO.trackingId) {
+      this.growingIO.vdsConfig = { ...this.growingIO.vdsConfig, ...vds };
+      getGlobal().vdsConfig = this.growingIO.vdsConfig;
+    } else {
+      this.growingIO.subInstance[trackingId] = {
+        ...this.growingIO.subInstance[trackingId],
+        ...vds
+      };
+      getGlobal().vdsConfig.subInstance[trackingId] =
+        this.growingIO.subInstance[trackingId];
     }
   };
 
@@ -360,30 +429,30 @@ class DataStore implements DataStoreType {
   };
 
   // 手动调用visit事件的方法
-  sendVisit = (props?: any) => {
+  sendVisit = (trackingId: string, props?: any) => {
     (this.eventHooks.appEffects as any).buildVisitEvent(
+      trackingId,
       props ?? this.lastVisitEvent
     );
-    // 等visit发完要重置页面时间，确保不会比visit早
-    this.eventHooks.currentPage.time = Date.now();
   };
 
   // 手动调用page事件的方法
-  sendPage = (props?: any) => {
-    (this.eventHooks.pageEffects as any).buildPageEvent(props);
+  sendPage = (trackingId: string, props?: any) => {
+    (this.eventHooks.pageEffects as any).buildPageEvent(trackingId, props);
   };
 
   // 事件的格式转换(同时移除无值的字段)
-  eventConverter = (event: any) => {
-    const { vdsConfig, dataStore, uploader } = this.growingIO;
+  eventConverter = (event: EXTEND_EVENT) => {
+    const { dataStore, uploader } = this.growingIO;
+    const { dataCollect } = this.getTrackerVds(event.trackingId);
     // 开启数据采集时才会处理事件、累计全局计数并将合成的事件提交到请求队列
-    if (vdsConfig.dataCollect) {
+    if (dataCollect) {
       //? 在4.0中用户属性事件和关闭事件不再带eventSequenceId字段
       if (!['LOGIN_USER_ATTRIBUTES', 'APP_CLOSED'].includes(event.eventType)) {
         //? 在4.0中event.eventSequenceId（esid）的值实际为全局的事件id，即值是globalSequenceId（gsid）为了保持向下兼容不做更名，会涉及存储
-        event.eventSequenceId = dataStore.gsid;
+        event.eventSequenceId = dataStore.getGsid(event.trackingId);
         // 全局事件计数加1
-        this.growingIO.dataStore.gsid += 1;
+        dataStore.setGsid(event.trackingId, event.eventSequenceId + 1);
       }
       const convertedEvent: any = {};
       forEach(event, (v: any, k: string) => {
@@ -404,7 +473,7 @@ class DataStore implements DataStoreType {
           convertedEvent[k] = v;
         }
       });
-      this.growingIO.emitter.emit('onComposeAfter', {
+      this.growingIO.emitter.emit(EMIT_MSG.ON_COMPOSE_AFTER, {
         composedEvent: convertedEvent
       });
       // 提交请求队列
@@ -424,7 +493,7 @@ class DataStore implements DataStoreType {
         // 有的事件的path和query不能再用页面的值，所以直接使用事件中已有的值
         const ne = {
           ...e,
-          ...this.eventContextBuilder({
+          ...this.eventContextBuilder(event.trackingId, {
             path: e.path,
             query: e.query,
             // page事件需要使用事件中原有的时间戳，其他事件也要用原来的时间戳保证事件的准确性
@@ -450,7 +519,7 @@ class DataStore implements DataStoreType {
         // 有的事件的path和query不能再用页面的值，所以直接使用事件中已有的值
         const ne = {
           ...e,
-          ...this.eventContextBuilder({
+          ...this.eventContextBuilder(e.trackingId, {
             path: e.path,
             query: e.query,
             // page事件需要使用事件中原有的时间戳，其他事件也要用原来的时间戳保证事件的准确性
@@ -464,7 +533,7 @@ class DataStore implements DataStoreType {
   };
 
   // 构建应用/页面转发分享事件
-  buildAppMessageEvent = (args: any) => {
+  buildAppMessageEvent = (trackingId: string, args: any) => {
     const originResult = args[0];
     let updateResult;
     if (args.length >= 2) {
@@ -487,13 +556,13 @@ class DataStore implements DataStoreType {
         $share_query: uri[1],
         ...updateResult?.attributes
       },
-      ...eventContextBuilder()
+      ...eventContextBuilder(trackingId)
     };
     eventInterceptor(event);
   };
 
   // 构建朋友圈分享事件
-  buildTimelineEvent = (args: any) => {
+  buildTimelineEvent = (trackingId: string, args: any) => {
     const originResult = args[0];
     let updateResult;
     if (args.length >= 2) {
@@ -515,13 +584,13 @@ class DataStore implements DataStoreType {
         $share_query: uri[1],
         ...updateResult?.attributes
       },
-      ...eventContextBuilder()
+      ...eventContextBuilder(trackingId)
     };
     eventInterceptor(event);
   };
 
   // 构建添加收藏事件
-  buildAddFavorites = (args: any) => {
+  buildAddFavorites = (trackingId: string, args: any) => {
     const originResult = args[0];
     let updateResult;
     if (args.length >= 2) {
@@ -541,9 +610,18 @@ class DataStore implements DataStoreType {
         $share_path: head(uri),
         $share_query: uri[1]
       },
-      ...eventContextBuilder()
+      ...eventContextBuilder(trackingId)
     };
     eventInterceptor(event);
+  };
+
+  // 需要对所有trackingId执行的逻辑
+  trackersExecute = (callback: (trackingId: string) => any) => {
+    this.initializedTrackingIds.forEach((trackingId: string) => {
+      if (typeOf(callback) === 'function') {
+        callback(trackingId);
+      }
+    });
   };
 }
 

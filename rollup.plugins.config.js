@@ -1,11 +1,11 @@
 // @ts-nocheck
 import { babel } from '@rollup/plugin-babel';
+import { terser } from 'rollup-plugin-terser';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import filesize from 'rollup-plugin-filesize';
 import path from 'path';
 import resolve from '@rollup/plugin-node-resolve';
-import terser from '@rollup/plugin-terser';
 import typescript from '@rollup/plugin-typescript';
 
 const fs = require('fs');
@@ -14,17 +14,20 @@ const processENV = process.argv[process.argv.length - 1]
   .split('-')
   .filter((o) => o);
 // 获取是否打包全量插件
-const folder = processENV[0] ?? 'all';
+const folder = processENV[0] ?? 'plugins';
+
+// 获取外置插件的目录
+const plugInFolder = fs
+  .readdirSync(`./src/${folder}`)
+  .filter((o) => !['.DS_Store'].includes(o));
 
 const expls = [];
-const plgs = fs.readdirSync(`./src/pluginsOut/${folder}`);
-plgs.forEach((plg) => {
-  if (plg && plg.endsWith('.ts') && plg !== 'gioCustomTracking.ts') {
-    const outName = plg.split('.')[0];
+plugInFolder.forEach((plugin) => {
+  if (plugin && plugin.endsWith('.ts')) {
+    const outName = plugin.split('.')[0];
     expls.push({
-      input: `${folder}/${plg}`,
-      output: `${folder === 'ordinary' ? 'plugins/' : folder + '/'
-        }${outName}.js`,
+      input: `src/${folder}/${plugin}`,
+      output: `${folder}/${outName}.js`,
       name: `${outName}.js`
     });
   }
@@ -32,7 +35,7 @@ plgs.forEach((plg) => {
 
 const configs = [];
 const configGenerat = ({ input, output, name }) => ({
-  input: `src/pluginsOut/${input}`,
+  input,
   output: {
     file: `dist/${output}`,
     format: 'es',

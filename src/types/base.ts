@@ -1,3 +1,7 @@
+export interface StringObject {
+  [key: string]: string;
+}
+
 interface TBConfig {
   cloud: any;
   cloudFuncSend?: boolean;
@@ -35,8 +39,6 @@ export interface UserOptions {
   requestTimeout?: number;
   // 数据上报域名
   serverUrl?: string;
-  // 是否标记为分包
-  subpackage: boolean;
   // taro框架实例
   taro?: any;
   // taro框架vue实例
@@ -76,7 +78,7 @@ export type EventTypes =
   | 'VIEW_CLICK'
   | 'VIEW_CHANGE';
 
-export interface Event {
+export interface EVENT {
   appChannel: string;
   appVersion: string;
   attributes?: any;
@@ -110,6 +112,11 @@ export interface Event {
   title: string;
   userId?: string;
   xpath?: string;
+}
+
+export interface EXTEND_EVENT extends EVENT {
+  requestId: string;
+  trackingId: string;
 }
 
 export type Actions =

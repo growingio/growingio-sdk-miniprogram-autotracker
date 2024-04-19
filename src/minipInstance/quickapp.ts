@@ -1,9 +1,11 @@
 import { GrowingIOType } from '@@/types/growingIO';
-import { SystemInfo } from '@@/types/minipInstance';
 import { isString, last } from '@@/utils/glodash';
 import { limitString } from '@@/utils/tools';
+import { SystemInfo } from '@@/types/minipInstance';
 import app from '@system.app';
+import BaseImplements from './base';
 import device from '@system.device';
+import EMIT_MSG from '@@/constants/emitMsg';
 import fetch from '@system.fetch';
 import image from '@system.image';
 import network from '@system.network';
@@ -11,12 +13,10 @@ import router from '@system.router';
 import share from '@system.share';
 import storage from '@system.storage';
 
-import BaseImplements from './base';
-
 class QuickApp extends BaseImplements {
   constructor(public growingIO: GrowingIOType) {
     super(growingIO);
-    this.growingIO.emitter.on('minipLifecycle', ({ event }) => {
+    this.growingIO.emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event }) => {
       switch (event) {
         case 'App onCreate':
           {
@@ -76,24 +76,10 @@ class QuickApp extends BaseImplements {
 
   // 初始化分享
   initShareAppMessage = (growingIO: GrowingIOType) => {
-    const { vdsConfig, platformConfig } = growingIO;
+    const { platformConfig } = growingIO;
     try {
       this.growingIO.shareAppMessage = function () {
         const params = arguments[0];
-        if (
-          params &&
-          params.type &&
-          !/^text.*/.test(params.type) &&
-          params.data
-        ) {
-          if (vdsConfig.followShare) {
-            if (params.data.indexOf('?') === -1) {
-              params.data = params.data + '?suid=' + growingIO.userStore.uid;
-            } else {
-              params.data = params.data + '&suid=' + growingIO.userStore.uid;
-            }
-          }
-        }
         share?.share(params);
         growingIO?.eventTracking?.pageEffects(
           this,

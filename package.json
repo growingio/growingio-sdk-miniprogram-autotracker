@@ -1,46 +1,31 @@
 {
   "name": "gio-miniprogram-sdk",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "description": "GrowngIO官方小程序 SDK，具备自动采集基本的用户行为事件，比如访问和行为数据等。目前支持微信小程序、支付宝小程序、百度小程序、字节(抖音头条)小程序、QQ小程序、淘宝小程序、京东小程序、快手小程序、快应用。",
-  "main": "./dist/wechat.js",
   "author": "anyi@startdt.com",
   "license": "GNU General Public License v3.0",
   "scripts": {
-    "build:full": "./bin/build/full.sh",
-    "build:jd": "./bin/build/jd.sh",
-    "build:ks": "./bin/build/ks.sh",
-    "build:my": "./bin/build/my.sh",
-    "build:plugins": "bin/build/plugins.sh",
-    "build:qq": "./bin/build/qq.sh",
-    "build:quickapp": "./bin/build/quickapp.sh",
-    "build:swan": "./bin/build/swan.sh",
-    "build:taro": "./bin/build/taro.sh",
-    "build:tb": "./bin/build/tb.sh",
-    "build:tt": "./bin/build/tt.sh",
-    "build:uniapp": "./bin/build/uniapp.sh",
-    "build:wx": "./bin/build/wx.sh",
-    "build": "./bin/build/all.sh",
-    "dev:full": "./bin/dev/full.sh",
-    "dev:jd": "./bin/dev/jd.sh",
-    "dev:ks": "./bin/dev/ks.sh",
-    "dev:my": "./bin/dev/my.sh",
-    "dev:plugins": "./bin/dev/plugins.sh",
-    "dev:qq": "./bin/dev/qq.sh",
-    "dev:quickapp": "./bin/dev/quickapp.sh",
-    "dev:swan": "./bin/dev/swan.sh",
-    "dev:taro": "./bin/dev/taro.sh",
-    "dev:tb": "./bin/dev/tb.sh",
-    "dev:tt": "./bin/dev/tt.sh",
-    "dev:uniapp": "./bin/dev/uniapp.sh",
-    "dev:wx": "./bin/dev/wx.sh",
-    "lint": "eslint --fix 'src/**/*.{js,ts}'"
+    "build:jd": "rollup -c rollup.config.js --jd",
+    "build:ks": "rollup -c rollup.config.js --ks",
+    "build:my": "rollup -c rollup.config.js --my",
+    "build:plugins": "rollup -c rollup.plugins.config.js --plugins",
+    "build:qq": "rollup -c rollup.config.js --qq",
+    "build:quickapp": "rollup -c rollup.config.js --quickapp",
+    "build:swan": "rollup -c rollup.config.js --swan",
+    "build:taro": "rollup -c rollup.config.js --framework-taro",
+    "build:tb": "rollup -c rollup.config.js --tb",
+    "build:tt": "rollup -c rollup.config.js --tt",
+    "build:uniapp": "rollup -c rollup.config.js --framework-uniapp",
+    "build:wx": "rollup -c rollup.config.js --wx",
+    "build": "./bin/build.sh",
+    "lint": "eslint --fix 'src/**/*.{js,ts}'",
+    "test": "./bin/test/autoTest-wechat.sh",
+    "test:taro3-react": "./bin/test/autoTest-taro3-react.sh",
+    "test:taro3-vue3": "./bin/test/autoTest-taro3-vue3.sh"
   },
-  "engines": {
-    "node": "16.x"
-  },
-  "dependencies": {
-    "mitt": "^3.0.0",
-    "querystringify": "^2.2.0"
+  "repository": {
+    "type": "git",
+    "url": "https://git.growingio.cn/growing/sdk/gio-miniprogram-autotracker.git"
   },
   "devDependencies": {
     "@babel/core": "^7.16.0",
@@ -51,35 +36,43 @@
     "@rollup/plugin-commonjs": "^21.0.1",
     "@rollup/plugin-node-resolve": "^13.0.2",
     "@rollup/plugin-replace": "^3.0.0",
-    "@rollup/plugin-terser": "^0.4.3",
     "@rollup/plugin-typescript": "^8.2.3",
+    "@types/jest": "^27.0.3",
     "@types/webpack-env": "^1.16.2",
     "@typescript-eslint/eslint-plugin": "^5.7.0",
     "@typescript-eslint/parser": "^5.7.0",
     "babel-core": "^6.26.3",
-    "babel-plugin-bulk-import": "^2.0.0",
     "eslint": "^8.4.1",
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-prettier": "^4.0.0",
-    "generate-source-map": "^0.0.5",
+    "jest": "^27.4.3",
+    "jest-serial-runner": "^1.2.1",
+    "miniprogram-automator": "^0.11.0",
     "prettier": "^2.3.2",
     "rollup": "^2.53.2",
     "rollup-plugin-copy": "^3.4.0",
     "rollup-plugin-filesize": "^9.1.1",
     "rollup-plugin-minip-components-transfer": "^1.0.0",
+    "rollup-plugin-terser": "^7.0.2",
     "shelljs": "^0.8.5",
     "tslib": "^2.3.1",
     "typescript": "^4.3.5"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/growingio/growingio-sdk-miniprogram-autotracker.git"
+  "dependencies": {
+    "@jest/test-sequencer": "^29.7.0",
+    "@types/shelljs": "^0.8.15",
+    "mitt": "^3.0.0",
+    "querystringify": "^2.2.0"
   },
   "bugs": {
     "url": "https://github.com/growingio/growingio-sdk-miniprogram-autotracker/issues"
   },
   "homepage": "https://github.com/growingio/growingio-sdk-miniprogram-autotracker#readme",
   "exports": {
+    ".": {
+      "import": "./dist/wechat.js",
+      "require": "./dist/wechat.js"
+    },
     "./wechat": {
       "import": "./dist/wechat.js",
       "require": "./dist/wechat.js"
@@ -139,6 +132,10 @@
     "./plugins/gioImpressionTracking": {
       "import": "./dist/plugins/gioImpressionTracking.js",
       "require": "./dist/plugins/gioImpressionTracking.js"
+    },
+    "./plugins/gioMultipleInstances": {
+      "import": "./dist/plugins/gioMultipleInstances.js",
+      "require": "./dist/plugins/gioMultipleInstances.js"
     }
   }
 }

@@ -84,8 +84,7 @@ export interface MinipPageType {
   currentLifecycle: string;
   parsePage: (page: any, query: any) => void;
   getQuery: (query: any) => string;
-  getReferralPage: () => string;
-  saveShareId: (query: string) => void;
+  getReferralPage: (trackingId: string) => string;
   buildShareQuery: (result: PageShareResult) => [string, string];
   updateAppMessageResult: (result: PageShareResult) => PageShareResult;
   updateTimelineResult: (result: PageShareResult) => PageShareResult;
@@ -98,10 +97,6 @@ export interface EventHooksType {
   appHandlers: string[];
   pageHandlers: string[];
   actionEventTypes: string[];
-  originalApp: (any: any) => any;
-  originalPage: (any: any) => any;
-  originalComponent: (any: any) => any;
-  originalBehavior: (any: any) => any;
   appEffects: any;
   pageEffects: any;
   actionEffects: any;
@@ -128,6 +123,10 @@ export interface EventHooksType {
   pageOverriding: (options: any) => any;
   // Component/Behavior重写(重写除构造函数之外的所有方法)
   componentOverriding: (options: any) => any;
+  // 挂载App生命周期的effect方法
+  setAppEffectCbs: () => void;
+  // 挂载Page/Component生命周期的effect方法
+  setPageEffectCbs: () => void;
   // App属性重写复用方法
   growingApp: (app: any) => any;
   // Page属性重写复用方法

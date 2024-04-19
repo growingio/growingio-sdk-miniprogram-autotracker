@@ -1,8 +1,10 @@
+import { EVENT, EXTEND_EVENT } from './base';
+
 export interface UploaderType {
   // 因forceLogin配置积压的事件请求队列
-  hoardingQueue: any[];
+  hoardingQueue: any;
   // 请求队列
-  requestQueue: any[];
+  requestQueue: any;
   // 请求限制最大数
   requestLimit: number;
   // 请求重试限制最大数
@@ -11,14 +13,18 @@ export interface UploaderType {
   retryIds: any;
   // 请求中的请求数
   requestingNum: number;
-  // 请求地址
-  requestURL: string;
+  // 获取积压列表
+  getHoardingQueue: (trackingId: string) => EXTEND_EVENT[];
+  // 获取请求列表
+  getRequestQueue: (trackingId: string) => EXTEND_EVENT[];
   // 提交请求至队列
-  commitRequest: (reqData) => void;
-  // 发送请求
-  initiateRequest: (forceSend?: boolean) => void;
+  commitRequest: (commitData: EXTEND_EVENT) => void;
+  // 初始化请求
+  initiateRequest: (trackingId: string, forceSend?: boolean) => void;
+  // 发送事件
+  sendEvent: (eventsQueue: EXTEND_EVENT[], requestData: EVENT[]) => void;
   // 请求错误回调
-  requestFailFn: (data) => void;
-  // 更新/生成新的上报地址方法
-  generateURL?: () => void;
+  requestFailFn: (event: EXTEND_EVENT) => void;
+  // 生成上报地址
+  generateURL: (trackingId: string) => void;
 }

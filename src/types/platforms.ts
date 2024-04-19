@@ -28,10 +28,6 @@ export interface PlatformConfigType {
   appHandlers?: string[];
   pageHandlers?: string[];
   actionEventTypes?: string[];
-  originalPage?: (any) => any;
-  originalApp?: (any) => any;
-  originalComponent?: (any) => any;
-  originalBehavior?: (any) => any;
   hooks?: {
     App: boolean;
     Page: boolean;

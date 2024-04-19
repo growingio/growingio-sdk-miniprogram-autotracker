@@ -8,7 +8,6 @@ export const ABTEST_DATA_REG = /^\d+_gdp_abtd$/;
 export const ID_REG = /^\d{1,10}$/;
 export const IMP_DATA_REG = /^gioTrack(.+)/;
 export const IMP_EVENTNAME_REG = /^[a-zA-Z_][0-9a-zA-Z_]{0,100}$/;
-export const QUICKAPP_PARAM_REG = /^text.*/;
 export const SWAN_XID_REG = /^_[0-9a-z]+/;
 export const TARO_XID_REG = /^_n_[0-9]+$/;
 export const TARO_EVENT_PROPS_REG = /^__reactProps\$[a-z0-9]+$/i;

@@ -1,4 +1,6 @@
+import { IMP_EVENTNAME_REG } from '@@/constants/regex';
 import {
+  compact,
   find,
   forEach,
   head,
@@ -11,7 +13,8 @@ import {
   keys,
   split,
   startsWith,
-  toString
+  toString,
+  unset
 } from '@@/utils/glodash';
 
 // 控制台打印提示信息，包含错误、警告和信息3种形式
@@ -62,7 +65,7 @@ export const eventNameValidate = (eventName: string, callback: () => void) => {
   if (
     isString(eventName) &&
     !isEmpty(eventName) &&
-    eventName.match(/^[a-zA-Z_][0-9a-zA-Z_]{0,100}$/)
+    eventName.match(IMP_EVENTNAME_REG)
   ) {
     return callback();
   } else {
@@ -72,6 +75,22 @@ export const eventNameValidate = (eventName: string, callback: () => void) => {
     );
     return false;
   }
+};
+
+// 获取动态属性的值
+export const getDynamicAttributes = (properties: any) => {
+  if (!isNil(properties)) {
+    keys(properties).forEach((k: string) => {
+      if (isFunction(properties[k])) {
+        properties[k] = niceTry(() => properties[k]());
+      } else if (isObject(properties[k])) {
+        unset(properties, k);
+      } else if (!isArray(properties[k])) {
+        properties[k] = toString(properties[k]);
+      }
+    });
+  }
+  return properties;
 };
 
 // 生成uuid
@@ -132,7 +151,7 @@ export const compareVersion = (v1 = '', v2 = '') => {
 // 获取vue的主版本号
 export const getVueVersion = (vue) => {
   if (vue) {
-    const mv = Number.parseInt(head(split(vue.version, '.')), 10);
+    const mv = Number(head(split(vue.version, '.')));
     return Number.isNaN(mv) ? 0 : mv;
   } else {
     return 0;
@@ -282,12 +301,14 @@ export const getGlobal = () => {
 export const limitObject = (o: any) => {
   const ob = {};
   if (isObject(o)) {
+    // 移除预置的'&&sendTo'字段
+    unset(o, '&&sendTo');
     forEach(o, (v, k) => {
       const key = toString(k).slice(0, 100);
       if (isObject(v)) {
         ob[key] = limitObject(v);
       } else if (isArray(v)) {
-        ob[key] = v.slice(0, 100);
+        ob[key] = compact(v.slice(0, 100), true);
         ob[key] = ob[key].join('||').slice(0, 1000);
       } else {
         ob[key] = !isNil(v) ? toString(v).slice(0, 1000) : '';
@@ -368,7 +389,7 @@ export const qsParse = (s: string) => {
 };
 
 // 将字符串转为hash
-export const hashCode = (string) => {
+export const hashCode = (string: string, abs = false) => {
   let hash = 0;
   if (isEmpty(string) || typeof string === 'boolean') {
     return hash;
@@ -380,5 +401,5 @@ export const hashCode = (string) => {
     hash = hash & hash; //Convert to 32bit integer
     i++;
   }
-  return hash;
+  return abs ? Math.abs(hash) : hash;
 };

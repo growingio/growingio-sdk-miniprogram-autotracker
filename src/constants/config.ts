@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS = {
   extraParams: { type: 'array', default: [] },
   // 是否开启分享跟踪
   followShare: { type: 'boolean', default: true },
-  // 是否开启强制登录
+  // 是否开启强制登录；多实例时仅主实例生效(其他实例无条件服从主实例)
   forceLogin: { type: 'boolean', default: false },
   // 或略上报字段
   ignoreFields: { type: 'array', default: [] },
@@ -47,6 +47,8 @@ export const DEFAULT_SETTINGS = {
       path: undefined
     }
   },
+  // 是否自动采集页面访问事件
+  trackPage: { type: 'boolean', default: true },
   // uniapp vue实例
   uniVue: { type: ['object', 'function'], default: false },
   // 上报间隔（1秒）
@@ -55,35 +57,48 @@ export const DEFAULT_SETTINGS = {
   version: { type: 'string', default: '1.0.0' }
 };
 
-// 通过gdp(xxxx)允许调用的通用方法
-export const HANDLERS = [
-  'clearGeneralProps', // 移除埋点通用属性
+// 不管实例直接调用的方法
+export const DIRECT_HANDLERS = [
+  'getPlugins', // 获取所有已加载插件
+  'getDeviceId', // 获取设备id
+  'updateImpression' // 手动更新曝光
+];
+
+// 多实例的方法
+export const INSTANCE_HANDLERS = [
+  'clearGeneralProps', // 清除埋点通用属性
   'clearTrackTimer', // 清除所有事件计时器
-  'clearUserId', // 清除登录用户ID
-  'getDeviceId', // 获取设备ID（匿名用户ID）
+  'clearUserId', // 清除用户id
+  'getABTest', // 获取AB实验数据
   'getGioInfo', // 内嵌页打通信息
-  'getOption', // 获取当前配置项状态
-  'identify', // 强制登录
-  'init', // 初始化SDK
-  'registerPlugins', // 手动注册插件
+  'getOption', // 获取当前SDK配置项状态
+  'identify', // 强制登录设置设备id
   'removeTimer', // 移除事件计时器
+  'sendPage', // 手动发page事件
+  'sendVisit', // 手动发visit事件
   'setGeneralProps', // 设置埋点通用属性
-  'setLocation', // 手动设置位置信息（2022/4/29新增api，原getLocation废弃）
-  'setOption', // 动态修改配置项
+  'setLocation', // 手动设置位置信息
+  'setOption', // 设置配置项
   'setPageAttributes', // 设置页面属性
   'setUserAttributes', // 设置用户属性
-  'setUserId', // 设置登录用户ID
-  'track', // 埋点
+  'setUserId', // 设置用户id
+  'track', // 上报埋点
   'trackTimerEnd', // 停止事件计时器并上报事件
   'trackTimerPause', // 暂停事件计时器
   'trackTimerResume', // 恢复事件计时器
-  'trackTimerStart', // 初始化事件计时器
-  'updateImpression', // 手动更新曝光监听
-  'getABTest' // 获取ABTest数据
+  'trackTimerStart' // 初始化事件计时器
+];
+
+// 直接调用的通用方法
+export const HANDLERS = [
+  'init', // 初始化SDK
+  'registerPlugins', // 手动注册插件
+  ...DIRECT_HANDLERS,
+  ...INSTANCE_HANDLERS
 ];
 
 // 允许通过setOption修改的配置项
-export const ALLOWED_MODIFY_OPTIONS = {
+export const ALLOW_SET_OPTIONS = {
   autotrack: '无埋点',
   dataCollect: '数据采集',
   debug: '调试模式',
@@ -134,3 +149,17 @@ export const PLATFORMTYPES = [
   'xhs',
   'quickapp'
 ];
+
+// 各个需要拼接的在存储中的key后缀
+export const STORAGE_KEYS: any = {
+  gsid: '_growing_gsid_',
+  originalSource: '_gdp_original_source_',
+  userId: '_growing_userId_',
+  userKey: '_growing_userKey_',
+  gioId: '_growing_gioId_',
+  plugin_gsid: '_growing_plugin_gsid_',
+  plugin_originalSource: '_gdp_plugin_original_source_',
+  plugin_userId: '_growing_plugin_userId_',
+  plugin_userKey: '_growing_plugin_userKey_',
+  plugin_gioId: '_growing_plugin_gioId_'
+};

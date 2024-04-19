@@ -9,11 +9,11 @@ export interface PluginsType {
   gioCustomTracking?: any;
   gioEventAutoTracking?: any;
   gioImpressionTracking?: any;
-  gioMultiIntegrate?: any;
   gioPerformance?: any;
   gioTaobaoAdapter?: any;
   gioTaroAdapter?: any;
   gioUniAppAdapter?: any;
+  gioMultipleInstances?: any;
   innerPluginInit: () => void;
   outerPluginInit?: (folder?: string) => void;
   install: (pluginName: string, showLog: boolean) => boolean;

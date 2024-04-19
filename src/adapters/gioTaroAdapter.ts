@@ -12,6 +12,7 @@ import {
   TARO_EVENT_VUE_FUNC3_REG
 } from '@@/constants/regex';
 import { GrowingIOType } from '@@/types/growingIO';
+import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
 const HANDLER = {
@@ -34,7 +35,7 @@ class GioTaroAdapter {
     const { utils, emitter, minipInstance } = this.growingIO;
     ut = utils;
     this.exposedNames = {};
-    emitter.on('minipLifecycle', ({ event }) => {
+    emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event }) => {
       if (['Page onShow', 'Page onReady'].includes(event)) {
         if (this.taro && this.taroVersion === '3') {
           // 提前存储页面节点信息用来获取dataset
@@ -66,9 +67,8 @@ class GioTaroAdapter {
       this.taroVersion = '3';
       this.taroVue = taroVue;
       if (this.taroVue) {
-        const mainVersion = Number.parseInt(
-          ut.head(ut.split(this.taroVue.version, '.')),
-          10
+        const mainVersion = Number(
+          ut.head(ut.split(this.taroVue.version, '.'))
         );
         this.taroVueVersion = mainVersion;
         ut.consoleText(`Taro version 3, Vue version ${mainVersion}`, 'info');

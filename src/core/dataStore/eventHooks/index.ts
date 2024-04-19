@@ -6,6 +6,7 @@ import { consoleText, getGlobal, niceTry } from '@@/utils/tools';
 import AppEffects from './appEffects';
 import MinipPage from './minipPage';
 import PageEffects from './pageEffects';
+import EMIT_MSG from '@@/constants/emitMsg';
 
 class EventHooks implements EventHooksType {
   private appHooked: boolean;
@@ -33,10 +34,6 @@ class EventHooks implements EventHooksType {
     this.appHandlers = config.appHandlers;
     this.pageHandlers = config.pageHandlers;
     this.actionEventTypes = config.actionEventTypes;
-    this.originalApp = config.originalApp;
-    this.originalPage = config.originalPage;
-    this.originalComponent = config.originalComponent;
-    this.originalBehavior = config.originalBehavior ?? function () {}; // eslint-disable-line
     this.appEffects = new AppEffects(this.growingIO);
     this.pageEffects = new PageEffects(this.growingIO);
     this.currentPage = new MinipPage(this.growingIO);
@@ -161,7 +158,7 @@ class EventHooks implements EventHooksType {
         if (eventName !== 'onShareAppMessage') {
           result = method.apply(this, args);
         }
-        self.growingIO.emitter.emit('minipLifecycle', {
+        self.growingIO.emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
           event: `${cType} ${eventName}End`,
           timestamp: Date.now(),
           params: { instance: this, arguments: Array.from(args) }
@@ -324,6 +321,7 @@ class EventHooks implements EventHooksType {
       try {
         // 重写App
         if (platformHooks.App && !this.appHooked) {
+          this.originalApp = App || global.App || function () {};
           App = function (...args) {
             return self.growingApp(args[0]);
           };
@@ -337,6 +335,7 @@ class EventHooks implements EventHooksType {
       try {
         // 重写Page
         if (platformHooks.Page && !this.pageHooked) {
+          this.originalPage = Page || global.Page || function () {};
           Page = function (...args) {
             return self.growingPage(args[0]);
           };
@@ -350,6 +349,8 @@ class EventHooks implements EventHooksType {
       try {
         // 重写Component
         if (platformHooks.Component && !this.componentHooked) {
+          this.originalComponent =
+            Component || global.Component || function () {};
           Component = function (...args) {
             return self.growingComponent(args[0]);
           };
@@ -363,6 +364,7 @@ class EventHooks implements EventHooksType {
       try {
         // 重写Behavior
         if (platformHooks.Behavior && !this.behaviorHooked) {
+          this.originalBehavior = Behavior || global.Behavior || function () {};
           Behavior = function (...args) {
             return self.growingBehavior(args[0]);
           };

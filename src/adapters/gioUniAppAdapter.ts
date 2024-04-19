@@ -2,6 +2,7 @@
  * 名称：uniapp代理插件
  * 用途：用于重写uniapp框架下的创建App/Page/Component方法实现代理Hook；并获取uniapp框架下的自定义方法真实方法名获取。
  */
+import { UNIAPP_FUNC_REG } from '@@/constants/regex';
 import { GrowingIOType } from '@@/types/growingIO';
 
 const ONCE = '~';
@@ -23,11 +24,7 @@ class GioUniAppAdapter {
       this.uniVue = this.growingIO?.vdsConfig?.uniVue;
     }
     console.log('Vue version: ', this.uniVue.version);
-    if (this.growingIO?.vdsConfig?.subpackage) return false;
-    const mainVersion = Number.parseInt(
-      ut.head(ut.split(this.uniVue.version, '.')),
-      10
-    );
+    const mainVersion = Number(ut.head(ut.split(this.uniVue.version, '.')));
     switch (mainVersion) {
       case 2:
         this.uniVue2Proxy(this.uniVue);
@@ -112,6 +109,38 @@ class GioUniAppAdapter {
       dataStore: { eventHooks },
       minipInstance
     } = this.growingIO;
+    // 重写对象遍历逻辑，优先hook methods最后才是原生
+    eventHooks.objectTraverse = (target: any, fn: any) => {
+      if (ut.has(target, 'methods')) {
+        Object.getOwnPropertyNames(target.methods).forEach((k: string) => {
+          fn(k, target.methods);
+        });
+      }
+      if (ut.has(target, 'lifetimes')) {
+        Object.getOwnPropertyNames(target.lifetimes).forEach((k: string) => {
+          fn(k, target.lifetimes);
+        });
+      }
+      if (ut.has(target, 'pageLifetimes')) {
+        Object.getOwnPropertyNames(target.pageLifetimes).forEach(
+          (k: string) => {
+            fn(k, target.pageLifetimes);
+          }
+        );
+      }
+      Object.getOwnPropertyNames(target).forEach((k: string) => {
+        if (
+          !ut.niceTry(
+            () =>
+              !target?.methods[k] &&
+              !target?.lifetimes[k] &&
+              !target?.pageLifetimes[k]
+          )
+        ) {
+          fn(k, target);
+        }
+      });
+    };
     eventHooks.nativeGrowing();
     // 需要单独处理getPageTitle，防止在vue中onShow里拿的是错误的
     const originGetter = minipInstance.getPageTitle;
@@ -180,7 +209,7 @@ class GioUniAppAdapter {
           const methodKeys = ut
             .keys(this.$scope)
             .filter(
-              (k) => /^e[0-9]+$/.test(k) && ut.isFunction(this.$scope[k])
+              (k) => UNIAPP_FUNC_REG.test(k) && ut.isFunction(this.$scope[k])
             );
           methodKeys.forEach((k, i) => {
             const originFunc = this.$scope[k].value;

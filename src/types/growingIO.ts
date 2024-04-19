@@ -40,54 +40,70 @@ export interface GrowingIOType {
   taro3VMs?: any;
   // 分享数据
   shareAppMessage?: any;
+  // 用于放在事件中区别于为其他功能而生成事件的跟踪器Id，默认为g0
+  trackingId: string;
+  // 存储子实例的配置和信息
+  subInstance: {
+    [key: string]: OriginOptions;
+  };
   // 初始化方法
   init: (args: any) => void;
   // 注册插件
   registerPlugins?: (path?: string) => void;
   // 运行中修改配置
-  setOption: (optionKey: string, value: any) => void;
+  setOption: (trackingId: string, optionKey: string, value: any) => void;
   // 运行中获取配置
-  getOption: (optionKey?: string) => any;
+  getOption: (trackingId: string, optionKey?: string) => any;
   // 创建自定义埋点事件
   track?: (
+    trackingId: string,
     name: string,
     properties: { [key: string]: string },
     items?: { key: string; id: string; attributes?: { [key: string]: string } }
   ) => void;
   // 设置登录用户Id
-  setUserId?: (userId: string, userKey?: string) => void;
+  setUserId?: (trackingId: string, userId: string, userKey?: string) => void;
   // 清除登录用户Id
-  clearUserId?: () => void;
+  clearUserId?: (trackingId: string) => void;
   // 设置openId作为uid
-  identify?: (openId: string) => void;
+  identify?: (trackingId: string, openId: string) => void;
   // 发送用户变量
-  setUserAttributes?: (userAttributes: any) => void;
+  setUserAttributes?: (trackingId: string, userAttributes: any) => void;
   // 初始化回调
   initCallback?: () => void;
   // 错误提示
   callError?: (fn: string, type?: boolean, msg?: string) => void;
   // 工具类
   utils?: any;
-  // 事件通用维度组装
-  eventContextBuilder?: (updateTime?: boolean) => any;
   // 事件转换
   eventConverter?: (event: any) => void;
   // 事件拦截器
   eventInterceptor?: (event: any) => void;
   // 设置埋点通用属性
-  setGeneralProps?: (properties: any) => void;
+  setGeneralProps?: (trackingId: string, properties: any) => void;
   // 清除已设置的埋点通用属性
-  clearGeneralProps?: (properties: string[] | undefined) => void;
+  clearGeneralProps?: (
+    trackingId: string,
+    properties: string[] | undefined
+  ) => void;
   // 手动更新曝光监听
   updateImpression?: (collect?: any) => void;
   // 清除所有事件计时器
-  clearTrackTimer?: () => void;
+  clearTrackTimer?: (trackingId: string) => void;
   // 手动获取位置信息补发visit上报
-  setLocation: (latitude: number, longitude: number) => void;
+  setLocation: (
+    trackingId: string,
+    latitude: number,
+    longitude: number
+  ) => void;
   // 获取打通信息
-  getGioInfo: () => string;
+  getGioInfo: (trackingId: string) => string;
   // 获取ABTest数据
-  getABTest?: (layerId: string, callback?: (arg: any) => any) => void;
+  getABTest?: (
+    trackingId: string,
+    layerId: string,
+    callback?: (arg: any) => any
+  ) => void;
 
   emitter: {
     emit?: (msg: string, args?: any) => void;

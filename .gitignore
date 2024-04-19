@@ -22,15 +22,9 @@
 junit.xml
 
 # develop
-bin/*.sh
-bin/test
-bin/dev
-src/plugins
 src/pluginsIn
-src/pluginsOut/extra
-src/pluginsOut/performance
-src/pluginsOut/extra
-src/pluginsOut/extra
+src/pluginsOut
+src/extraPlugins
 
 test
 jest*

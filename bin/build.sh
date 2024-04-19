@@ -1,9 +1,6 @@
 # 清空产物
 rm -r dist/*
 
-# 插件
-npm run build:plugins
-
 # 微信小程序
 npm run build:wx
 
@@ -36,3 +33,6 @@ npm run build:uniapp
 
 # taro2/3 react/vue2/vue3
 npm run build:taro
+
+# 插件
+npm run build:plugins

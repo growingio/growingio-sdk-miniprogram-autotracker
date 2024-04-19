@@ -40,10 +40,6 @@ const Config: PlatformConfigType = {
     'contact',
     'mouseup'
   ],
-  originalApp: niceTry(() => App),
-  originalPage: niceTry(() => Page),
-  originalComponent: niceTry(() => Component),
-  originalBehavior: niceTry(() => Behavior),
   canHook: true,
   hooks: {
     App: true,

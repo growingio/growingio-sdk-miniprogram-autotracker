@@ -1,22 +1,26 @@
 export interface UserStoreType {
-  // 访问用户id在存储中的名称
-  uidStorageName: string;
-  // 登录用户id在存储中的名称
-  userIdStorageName: string;
-  // 最后一次登录用户id在存储中的名称
-  gioIdStorageName: string;
-  // 用户访问会话id
-  sessionId: string;
-  // 访问用户id（系统设置持久性存储）
-  uid: string;
-  // 登录用户id（客户设置持久性存储）
-  userId: string;
-  // idMapping userKey（客户设置持久性存储）
-  userKey: string;
-  // 最后一次登录用户id（持久性存储）
-  gioId: string;
+  // 获取设备Id
+  getUid: () => string;
+  // 设置设备Id
+  setUid: (id: string) => void;
+  // 获取sessionId
+  getSessionId: (trackingId: string) => string;
+  // 设置sessionId
+  setSessionId: (trackingId: string, id?: string) => void;
+  // 获取userId
+  getUserId: (trackingId: string) => string;
+  // 设置userId
+  setUserId: (trackingId: string, id?: string) => void;
+  // 获取userKey
+  getUserKey: (trackingId: string) => string;
+  // 设置userKey
+  setUserKey: (trackingId: string, key?: string) => void;
+  // 获取gioId
+  getGioId: (trackingId: string) => string;
+  // 设置gioId
+  setGioId: (trackingId: string, id?: string) => void;
   // 初始化用户信息
-  initUserInfo: () => void;
+  initUserInfo: (trackingId: string) => void;
   // 退出小程序时在存储中同步用户信息
   saveUserInfo: () => void;
 }

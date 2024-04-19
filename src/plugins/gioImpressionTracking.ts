@@ -2,9 +2,18 @@
  * 名称：半自动浏览埋点插件
  * 用途：用于提供半自动浏览埋点事件的自动注册、参数检验构建和创建事件方法。
  */
+import { IMP_DATA_REG } from '@@/constants/regex';
 import { GrowingIOType } from '@@/types/growingIO';
-import { hashCode } from '@@/utils/tools';
-import { isEmpty, isEqualArray, toString } from '@@/utils/glodash';
+import {
+  compact,
+  isArray,
+  isEmpty,
+  isEqualArray,
+  isString,
+  toString
+} from '@@/utils/glodash';
+import { eventNameValidate, hashCode, niceTry } from '@@/utils/tools';
+import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
 class GioImpressionTracking {
@@ -27,7 +36,7 @@ class GioImpressionTracking {
       }
       minipInstance.initImpression(collect);
     };
-    emitter.on('minipLifecycle', ({ event, params }) => {
+    emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event, params }) => {
       const { minipInstance } = this.growingIO;
       if (event === 'Page onShowEnd') {
         const page = minipInstance.getCurrentPage();
@@ -78,6 +87,7 @@ class GioImpressionTracking {
       case 'jd':
         return collectTarget.__wxExparserNodeId__; // wx page/component
       case 'my':
+      case 'tb':
         return collectTarget.$page
           ? `${collectTarget.$page.$id}-${collectTarget.$id}` //my component
           : collectTarget.$id; // my page
@@ -229,8 +239,28 @@ class GioImpressionTracking {
             this.sentImps[sentId] = dataProperties;
           }
         }
-        if (dataProperties.eventId) {
-          this.buildImpEvent(dataProperties);
+        if (dataProperties.eventName) {
+          let sendTargets = [];
+          if (dataset.gioImpSendto) {
+            // 先尝试处理成数组
+            sendTargets = compact(
+              isArray(dataset.gioImpSendto)
+                ? dataset.gioImpSendto
+                : niceTry(() => JSON.parse(dataset.gioImpSendto)) || []
+            );
+            // 在尝试处理字符串
+            if (isEmpty(sendTargets)) {
+              niceTry(() =>
+                dataset.gioImpSendto.split(',').forEach((s: string) => {
+                  s = isString(s) && s.trim().replace('[', '').replace(']', '');
+                  if (s) {
+                    sendTargets.push(s);
+                  }
+                })
+              );
+            }
+          }
+          this.buildImpEvent(dataProperties, sendTargets);
         } else {
           ut.consoleText(
             '曝光事件格式不正确，事件名只能包含数字、字母和下划线，且不以数字开头!',
@@ -244,13 +274,13 @@ class GioImpressionTracking {
   // 曝光参数获取
   getImpressionProperties = (dataSet: any) => {
     let data: any = {
-      eventId: undefined,
+      eventName: undefined,
       properties: {}
     };
     if (!dataSet?.gioImpTrack) {
       return data;
     } else {
-      data.eventId = dataSet.gioImpTrack;
+      data.eventName = dataSet.gioImpTrack;
     }
     if (ut.has(dataSet, 'gioImpAttrs')) {
       // imp写法二
@@ -261,10 +291,9 @@ class GioImpressionTracking {
       );
     } else {
       // imp写法一
-      const propReg = /^gioTrack(.+)/;
       for (const key in dataSet) {
         let normKey;
-        const matchArr = key.match(propReg);
+        const matchArr = key.match(IMP_DATA_REG);
         if (matchArr) {
           normKey = ut.lowerFirst(matchArr[1]);
           if (normKey !== 'track') {
@@ -275,13 +304,12 @@ class GioImpressionTracking {
     }
     // 对参数对象进行限制
     data.properties = ut.limitObject(data.properties);
-    // 校验eventId
-    const eventIdReg = /^\w+$/;
-    if (
-      !eventIdReg.test(data.eventId) ||
-      Number.isInteger(Number.parseInt(ut.head(data.eventId.split('')), 10))
-    ) {
-      data.eventId = null;
+    // 校验eventName
+    const validate = eventNameValidate(data.eventName, () => {
+      return data;
+    });
+    if (!validate) {
+      data.eventName = null;
       data = {};
     }
     return data;
@@ -315,18 +343,23 @@ class GioImpressionTracking {
   };
 
   // 创建半自动曝光事件
-  buildImpEvent = (dataProperties: any) => {
-    const { eventId, properties } = dataProperties;
+  buildImpEvent = (dataProperties: any, sendTargets: string[]) => {
+    const { eventName, properties } = dataProperties;
     const {
-      dataStore: { eventContextBuilder, eventInterceptor }
+      trackingId,
+      dataStore: { eventContextBuilder, eventConverter },
+      plugins
     } = this.growingIO;
     const event = {
       eventType: 'CUSTOM',
-      eventName: eventId,
+      eventName,
       attributes: properties,
-      ...eventContextBuilder()
+      ...eventContextBuilder(trackingId)
     };
-    eventInterceptor(event);
+    if (plugins.gioMultipleInstances && !isEmpty(sendTargets)) {
+      event['&&sendTo'] = sendTargets;
+    }
+    eventConverter(event);
   };
 }
 

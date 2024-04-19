@@ -1,43 +1,58 @@
 import { UserOptions } from '@@/types/base';
 import { EventHooksType } from '@@/types/eventHooks';
 
+export type StorageKeyType =
+  | 'gsid'
+  | 'originalSource'
+  | 'uid'
+  | 'sessionId'
+  | 'userId'
+  | 'userKey'
+  | 'gioId';
+
 export interface OriginOptions extends UserOptions {
   appId: string;
   dataSourceId?: string;
   projectId: string;
+  trackingId: string;
 }
 
 export interface DataStoreType {
-  buildAddFavorites: (args: any) => void;
-  buildAppMessageEvent: (args: any) => void;
-  buildTimelineEvent: (args: any) => void;
-  eventContextBuilder: (params?: any) => any;
+  buildAddFavorites: (trackingId: string, args: any) => void;
+  buildAppMessageEvent: (trackingId: string, args: any) => void;
+  buildTimelineEvent: (trackingId: string, args: any) => void;
+  // 事件通用维度组装
+  eventContextBuilder?: (trackingId: string, params?: any) => any;
   eventConverter?: (event) => void;
   eventHooks: EventHooksType;
   eventInterceptor?: (event: any | void) => void;
   eventReleaseInspector?: () => void;
   generalProps: any;
-  getOption: (k?: string) => OriginOptions;
-  getOriginalSource: () => any;
-  gsid: number;
-  gsidStorageName: string;
-  initOptions: (userOptions: OriginOptions) => void;
-  initStorageInfo: () => void;
+  getStorageKey: (trackingId: string, name: StorageKeyType) => string;
+  getTrackerVds: (trackingId: string) => any;
+  getOption: (trackingId: string, k?: string) => OriginOptions;
+  getOriginalSource: (trackingId: string) => any;
+  getGsid: (trackingId: string) => number;
+  setGsid: (trackingId: string, value: number) => void;
+  initTrackerOptions: (userOptions: OriginOptions) => any;
+  initTrackerHooker: (trackerOptions: OriginOptions) => void;
+  initOptions: (userOptions: OriginOptions) => OriginOptions;
+  initStorageInfo: (trackingId: string) => void;
   interceptEvents: any[];
-  keepAlive: number;
   lastCloseTime: number;
   lastPageEvent: any;
   lastScene: number | string;
   lastVisitEvent: any;
   locationData: any;
-  originalSourceName: string;
   saveStorageInfo: () => void;
   scene: number | string;
-  sendPage: (props?: any) => void;
-  sendVisit: (props?: any) => void;
-  setOption: (k: string, v: any) => boolean;
-  setOriginalSource: (origins: any) => void;
+  sendPage: (trackingId: string, props?: any) => void;
+  sendVisit: (trackingId: string, props?: any) => void;
+  setOption: (trackingId: string, k: string, v: any) => boolean;
+  setOriginalSource: (trackingId: string, origins: any) => void;
   shareOut: boolean;
   toggleShareOut: (v?: boolean) => void;
   trackTimers?: any;
+  initializedTrackingIds: string[];
+  trackersExecute: (callback: (trackingId: string) => void) => void;
 }

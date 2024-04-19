@@ -2,14 +2,17 @@
  * 名称：淘宝小程序单发插件
  * 用途：用于提供淘宝小程序云函数和云应用的请求方法。
  */
+import { EVENT, EXTEND_EVENT } from '@@/types/base';
 import { GrowingIOType } from '@@/types/growingIO';
+import { head, unset } from '@@/utils/glodash';
+import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
 class GioTaobaoAdapter {
   constructor(public growingIO: GrowingIOType) {
     const { utils, emitter } = this.growingIO;
     ut = utils;
-    emitter.on('OPTION_INITIALIZED', (growingIO: GrowingIOType) => {
+    emitter.on(EMIT_MSG.OPTION_INITIALIZED, (growingIO: GrowingIOType) => {
       const { inPlugin, dataStore } = growingIO;
       if (inPlugin) {
         ut.getGlobal().Component = function (...args: any[]) {
@@ -17,7 +20,7 @@ class GioTaobaoAdapter {
         };
       }
     });
-    emitter.on('minipLifecycle', ({ event }) => {
+    emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event }) => {
       const { dataStore, vdsConfig } = this.growingIO;
       const widgetName = `小部件${vdsConfig.appId}`;
       switch (event) {
@@ -29,10 +32,12 @@ class GioTaobaoAdapter {
                 .map((k) => `${k}=${relationAppInfo[k]}`)
                 .join('&');
               dataStore.scene = sceneInfo.sceneId ?? '';
-              dataStore.sendVisit({
-                path: widgetName,
-                query,
-                title: widgetName
+              dataStore.trackersExecute((trackingId: string) => {
+                dataStore.sendVisit(trackingId, {
+                  path: widgetName,
+                  query,
+                  title: widgetName
+                });
               });
             };
             this.getRelationAppInfo((relationAppInfo: any) =>
@@ -41,9 +46,14 @@ class GioTaobaoAdapter {
           }
           break;
         case 'Page didMount':
-          dataStore.sendPage({
-            path: widgetName,
-            title: widgetName
+          dataStore.trackersExecute((trackingId: string) => {
+            const { trackPage } = dataStore.getTrackerVds(trackingId);
+            if (trackPage) {
+              dataStore.sendPage(trackingId, {
+                path: widgetName,
+                title: widgetName
+              });
+            }
           });
           break;
         default:
@@ -69,30 +79,31 @@ class GioTaobaoAdapter {
   };
 
   // 单条发送无延迟
-  singleInvoke = () => {
+  singleInvoke = (trackingId: string) => {
     const { vdsConfig, emitter, uploader } = this.growingIO;
+    const hoardingQueue = uploader.getHoardingQueue(trackingId);
+    const requestQueue = uploader.getRequestQueue(trackingId);
     // 过滤掉重试超过3次的请求(直接丢弃)
-    uploader.hoardingQueue = [...uploader.hoardingQueue].filter(
+    uploader.requestQueue[trackingId] = [...requestQueue].filter(
       (o) => (uploader.retryIds[o.requestId] || 0) < uploader.retryLimit
     );
-    uploader.requestQueue = [...uploader.requestQueue].filter(
-      (o) => (uploader.retryIds[o.requestId] || 0) < uploader.retryLimit
-    );
-    if (ut.isEmpty([...uploader.hoardingQueue, ...uploader.requestQueue])) {
+    if (ut.isEmpty([...hoardingQueue, ...requestQueue])) {
       return;
     }
-    let requestData =
-      uploader.hoardingQueue.shift() ?? uploader.requestQueue.shift();
+    const eventData: EXTEND_EVENT =
+      hoardingQueue.shift() ?? requestQueue.shift();
+    let requestData = { ...eventData };
+    unset(requestData, ['requestId', 'trackingId']);
     // 开启debug模式时，打印事件日志
     if (vdsConfig.debug) {
       console.log('[GrowingIO Debug]:', JSON.stringify(requestData, null, 2));
     }
-    emitter.emit('onSendBefore', { requestData });
-    this.cloudFuncInvoke(requestData);
+    emitter.emit(EMIT_MSG.ON_SEND_BEFORE, { requestData });
+    this.cloudFuncInvoke(eventData, requestData);
   };
 
   // 云函数调用
-  cloudFuncInvoke = (requestData) => {
+  cloudFuncInvoke = (eventData: EXTEND_EVENT, requestData: EVENT) => {
     const { vdsConfig, emitter, uploader } = this.growingIO;
     const { serverUrl, projectId, tbConfig } = vdsConfig;
     const app = ut.niceTry(() => getApp() ?? $global);
@@ -114,18 +125,18 @@ class GioTaobaoAdapter {
           uploader.requestingNum -= 1;
           // 这里的返回值只是调用了api是否成功，真正是否上报成功不知道，要去淘宝控制台看
           if (res.success) {
-            emitter.emit('onSendAfter', { result: res });
+            emitter.emit(EMIT_MSG.ON_SEND_AFTER, { result: res, requestData });
           } else {
-            uploader.requestFailFn(requestData);
+            uploader.requestFailFn(eventData);
             ut.consoleText(`请求失败! ${JSON.stringify(res)}`, 'error');
           }
-          uploader.initiateRequest();
+          uploader.initiateRequest(eventData.trackingId);
         })
         .catch((e) => {
           uploader.requestingNum -= 1;
-          uploader.requestFailFn(requestData);
+          uploader.requestFailFn(eventData);
           ut.consoleText(`请求失败! ${JSON.stringify(e)}`, 'error');
-          uploader.initiateRequest();
+          uploader.initiateRequest(eventData.trackingId);
         });
     } else {
       ut.consoleText(
@@ -136,12 +147,13 @@ class GioTaobaoAdapter {
   };
 
   // 云应用调用
-  tbCloudAppInvoke(requestData) {
+  tbCloudAppInvoke(eventsQueue: EXTEND_EVENT[], requestData: EVENT) {
     const { vdsConfig, emitter, uploader } = this.growingIO;
     const { serverUrl, projectId, tbConfig } = vdsConfig;
     const app = ut.niceTry(() => getApp() ?? $global);
     const cloud = tbConfig.cloud ?? app.cloud;
     if (cloud?.application?.httpRequest) {
+      const trackingId = head(eventsQueue).trackingId;
       uploader.requestingNum += 1;
       cloud.application
         .httpRequest({
@@ -157,30 +169,22 @@ class GioTaobaoAdapter {
           uploader.requestingNum -= 1;
           // 这里的返回值只是调用了api是否成功，真正是否上报成功不知道，要看云应用的服务端是不是真的转发成功
           if (res.success) {
-            emitter.emit('onSendAfter', { result: res });
+            emitter.emit(EMIT_MSG.ON_SEND_AFTER, { result: res, requestData });
           } else {
-            if (ut.isArray(requestData)) {
-              requestData.forEach((o: any) => {
-                uploader.requestFailFn(o);
-              });
-            } else {
-              uploader.requestFailFn(requestData);
-            }
+            eventsQueue.forEach((o: any) => {
+              uploader.requestFailFn(o);
+            });
             ut.consoleText(`请求失败! ${JSON.stringify(res)}`, 'error');
           }
-          uploader.initiateRequest();
+          uploader.initiateRequest(trackingId);
         })
         .catch((e) => {
           uploader.requestingNum -= 1;
-          if (ut.isArray(requestData)) {
-            requestData.forEach((o: any) => {
-              uploader.requestFailFn(o);
-            });
-          } else {
-            uploader.requestFailFn(requestData);
-          }
+          eventsQueue.forEach((o: any) => {
+            uploader.requestFailFn(o);
+          });
           ut.consoleText(`请求失败! ${JSON.stringify(e)}`, 'error');
-          uploader.initiateRequest();
+          uploader.initiateRequest(trackingId);
         });
     } else {
       ut.consoleText(

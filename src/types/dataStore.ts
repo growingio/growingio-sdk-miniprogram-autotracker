@@ -22,7 +22,11 @@ export interface DataStoreType {
   buildAppMessageEvent: (trackingId: string, args: any) => void;
   buildTimelineEvent: (trackingId: string, args: any) => void;
   // 事件通用维度组装
-  eventContextBuilder?: (trackingId: string, params?: any) => any;
+  eventContextBuilder?: (
+    trackingId: string,
+    params?: any,
+    executeAttributes?: boolean
+  ) => any;
   eventConverter?: (event) => void;
   eventHooks: EventHooksType;
   eventInterceptor?: (event: any | void) => void;

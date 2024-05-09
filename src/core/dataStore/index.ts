@@ -25,6 +25,7 @@ import {
   consoleText,
   getGlobal,
   guid,
+  limitObject,
   niceTry
 } from '@@/utils/tools';
 import {
@@ -548,16 +549,17 @@ class DataStore implements DataStoreType {
     const event = {
       eventType: 'CUSTOM',
       eventName: '$mp_on_share',
-      attributes: {
-        $from: originResult.from,
-        $target: originResult?.target?.id,
-        $share_title: updateResult?.title,
-        $share_path: head(uri),
-        $share_query: uri[1],
-        ...updateResult?.attributes
-      },
       ...eventContextBuilder(trackingId)
     };
+    event.attributes = limitObject({
+      ...(event.attributes ?? {}),
+      $from: originResult.from,
+      $target: originResult?.target?.id,
+      $share_title: updateResult?.title,
+      $share_path: head(uri),
+      $share_query: uri[1],
+      ...updateResult?.attributes
+    });
     eventInterceptor(event);
   };
 
@@ -577,15 +579,16 @@ class DataStore implements DataStoreType {
     const event = {
       eventType: 'CUSTOM',
       eventName: '$mp_share_timeline',
-      attributes: {
-        $target: originResult?.target?.id,
-        $share_title: updateResult?.title,
-        $share_path: head(uri),
-        $share_query: uri[1],
-        ...updateResult?.attributes
-      },
       ...eventContextBuilder(trackingId)
     };
+    event.attributes = limitObject({
+      ...(event.attributes ?? {}),
+      $target: originResult?.target?.id,
+      $share_title: updateResult?.title,
+      $share_path: head(uri),
+      $share_query: uri[1],
+      ...updateResult?.attributes
+    });
     eventInterceptor(event);
   };
 
@@ -605,13 +608,14 @@ class DataStore implements DataStoreType {
     const event = {
       eventType: 'CUSTOM',
       eventName: '$mp_add_favorites',
-      attributes: {
-        $share_title: updateResult?.title,
-        $share_path: head(uri),
-        $share_query: uri[1]
-      },
       ...eventContextBuilder(trackingId)
     };
+    event.attributes = limitObject({
+      ...(event.attributes ?? {}),
+      $share_title: updateResult?.title,
+      $share_path: head(uri),
+      $share_query: uri[1]
+    });
     eventInterceptor(event);
   };
 

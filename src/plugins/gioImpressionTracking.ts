@@ -9,14 +9,21 @@ import {
   isArray,
   isEmpty,
   isEqualArray,
+  isObject,
   isString,
   toString
 } from '@@/utils/glodash';
-import { eventNameValidate, hashCode, niceTry } from '@@/utils/tools';
+import {
+  eventNameValidate,
+  hashCode,
+  limitObject,
+  niceTry
+} from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
 class GioImpressionTracking {
+  public pluginVersion: string;
   public observerIds: any;
   public rects: any;
   public pageImpObserver: any;
@@ -25,6 +32,7 @@ class GioImpressionTracking {
   public componentQueryTarget: any;
   public sentImps: any;
   constructor(public growingIO: GrowingIOType) {
+    this.pluginVersion = '__PLUGIN_VERSION__';
     ut = this.growingIO.utils;
     this.observerIds = {};
     this.rects = {};
@@ -353,9 +361,12 @@ class GioImpressionTracking {
     const event = {
       eventType: 'CUSTOM',
       eventName,
-      attributes: properties,
       ...eventContextBuilder(trackingId)
     };
+    event.attributes = limitObject({
+      ...(event.attributes ?? {}),
+      ...(isObject(properties) && !isEmpty(properties) ? properties : {})
+    });
     if (plugins.gioMultipleInstances && !isEmpty(sendTargets)) {
       event['&&sendTo'] = sendTargets;
     }

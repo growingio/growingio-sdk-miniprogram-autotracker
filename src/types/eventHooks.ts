@@ -1,3 +1,5 @@
+import { EVENT } from './base';
+
 export type AppHookLifeCircle = 'onShow' | 'onHide' | 'onError';
 export type PageHookLifeCircle =
   | 'onShow'
@@ -89,6 +91,7 @@ export interface MinipPageType {
   updateAppMessageResult: (result: PageShareResult) => PageShareResult;
   updateTimelineResult: (result: PageShareResult) => PageShareResult;
   updateAddFavoritesResult: (result: PageShareResult) => PageShareResult;
+  eventSetPageProps: (trackingId: string, event: EVENT) => any;
 }
 
 export interface EventHooksType {

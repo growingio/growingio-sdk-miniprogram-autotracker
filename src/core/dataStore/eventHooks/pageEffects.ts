@@ -1,6 +1,5 @@
 import { get, isEmpty, isFunction, unset } from '@@/utils/glodash';
 import { GrowingIOType } from '@@/types/growingIO';
-import { niceTry } from '@@/utils/tools';
 import { PageHookLifeCircle } from '@@/types/eventHooks';
 import EMIT_MSG from '@@/constants/emitMsg';
 
@@ -157,12 +156,6 @@ class PageEffects {
       default:
         break;
     }
-    // 页面销毁移除当前页面的属性
-    if (event === pageListeners.pageUnload) {
-      trackersExecute((trackingId: string) => {
-        currentPage.pageProps[trackingId] = undefined;
-      });
-    }
   };
 
   // 构建页面访问事件
@@ -185,15 +178,11 @@ class PageEffects {
         minipInstance.getPageTitle(minipInstance.getCurrentPage()),
       timestamp: currentPage.time
     };
+    // 合并页面属性
+    event.attributes = currentPage.eventSetPageProps(trackingId, event);
     // 传入参数生成的page事件取值为传入参数
     if (!isEmpty(props) && props.title) {
       event.title = props.title;
-    }
-    // 添加页面属性
-    const pageProps = niceTry(() => currentPage.pageProps[trackingId]);
-    if (!isEmpty(pageProps)) {
-      event.attributes = pageProps;
-      currentPage.pageProps[trackingId] = undefined;
     }
     eventInterceptor(event);
   };

@@ -9,7 +9,9 @@ import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
 class GioTaobaoAdapter {
+  public pluginVersion: string;
   constructor(public growingIO: GrowingIOType) {
+    this.pluginVersion = '__PLUGIN_VERSION__';
     const { utils, emitter } = this.growingIO;
     ut = utils;
     emitter.on(EMIT_MSG.OPTION_INITIALIZED, (growingIO: GrowingIOType) => {

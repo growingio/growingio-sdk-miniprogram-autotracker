@@ -11,8 +11,10 @@ import { OriginOptions } from '@@/types/dataStore';
 import EMIT_MSG from '@@/constants/emitMsg';
 
 export class GioMultipleInstances {
+  public pluginVersion: string;
   public subTrackingIds: string[];
   constructor(public growingIO: GrowingIOType) {
+    this.pluginVersion = '__PLUGIN_VERSION__';
     this.subTrackingIds = [];
     this.growingIO.emitter.on(EMIT_MSG.ON_SDK_INITIALIZE_BEFORE, () => {
       // 自动重写部分代码以实现多实例功能
@@ -153,10 +155,19 @@ export class GioMultipleInstances {
         unset(event, '&&sendTo');
         sendTo.forEach((trackingId: string) => {
           const { eventContextBuilder } = self.growingIO.dataStore;
-          originFunction.call(this, {
+          const newEvent = {
             ...event,
-            ...eventContextBuilder(trackingId)
-          });
+            ...eventContextBuilder(
+              trackingId,
+              undefined,
+              event.trackingId !== trackingId
+            )
+          };
+          newEvent.attributes = {
+            ...newEvent.attributes,
+            ...event.attributes
+          };
+          originFunction.call(this, newEvent);
         });
       } else {
         // 其他事件直接发给指定调用实例

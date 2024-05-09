@@ -10,8 +10,10 @@ import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
 class GioEventAutoTracking {
+  public pluginVersion: string;
   private prevEvent: any;
   constructor(public growingIO: GrowingIOType) {
+    this.pluginVersion = '__PLUGIN_VERSION__';
     ut = this.growingIO.utils;
     this.prevEvent = {};
   }
@@ -88,7 +90,7 @@ class GioEventAutoTracking {
     const xpath = this.getNodeXpath(e, eventName);
     if (xpath) {
       const {
-        dataStore: { eventContextBuilder, eventInterceptor }
+        dataStore: { eventContextBuilder, eventInterceptor, eventHooks }
       } = this.growingIO;
       const target = e.currentTarget || e.target;
       let idx;
@@ -115,6 +117,11 @@ class GioEventAutoTracking {
         ],
         ...eventContextBuilder(trackingId)
       };
+      // 合并页面属性
+      event.attributes = eventHooks.currentPage.eventSetPageProps(
+        trackingId,
+        event
+      );
       eventInterceptor(event);
     }
   };
@@ -122,7 +129,7 @@ class GioEventAutoTracking {
   // 构建tab菜单点击事件
   buildTabClickEvent = (trackingId: string, tabItem: any) => {
     const {
-      dataStore: { eventContextBuilder, eventInterceptor }
+      dataStore: { eventContextBuilder, eventInterceptor, eventHooks }
     } = this.growingIO;
     const event = {
       eventType: 'VIEW_CLICK',
@@ -136,6 +143,11 @@ class GioEventAutoTracking {
       ],
       ...eventContextBuilder(trackingId)
     };
+    // 合并页面属性
+    event.attributes = eventHooks.currentPage.eventSetPageProps(
+      trackingId,
+      event
+    );
     eventInterceptor(event);
   };
 
@@ -148,7 +160,7 @@ class GioEventAutoTracking {
     const xpath = this.getNodeXpath(e, eventName);
     if (xpath) {
       const {
-        dataStore: { eventContextBuilder, eventInterceptor }
+        dataStore: { eventContextBuilder, eventInterceptor, eventHooks }
       } = this.growingIO;
       const target = e.currentTarget || e.target;
       const event = {
@@ -163,6 +175,11 @@ class GioEventAutoTracking {
         }
       }
       event.element = [event.element];
+      // 合并页面属性
+      event.attributes = eventHooks.currentPage.eventSetPageProps(
+        trackingId,
+        event
+      );
       eventInterceptor(event);
     }
   };

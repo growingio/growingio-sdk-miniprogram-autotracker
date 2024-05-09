@@ -1,7 +1,24 @@
-import { has, head, isEmpty, last, unset } from '@@/utils/glodash';
+import {
+  compact,
+  has,
+  head,
+  isEmpty,
+  keys,
+  last,
+  unset
+} from '@@/utils/glodash';
 import { GrowingIOType } from '@@/types/growingIO';
 import { MinipPageType, PageShareResult } from '@@/types/eventHooks';
-import { qsStringify, normalPath, splitPath, qsParse } from '@@/utils/tools';
+import {
+  qsStringify,
+  normalPath,
+  splitPath,
+  qsParse,
+  niceTry,
+  getDynamicAttributes,
+  limitObject
+} from '@@/utils/tools';
+import { EVENT } from '@@/types/base';
 
 class MinipPage implements MinipPageType {
   public path: string;
@@ -84,6 +101,12 @@ class MinipPage implements MinipPageType {
     // 自定义path中没有截取到query说明是在onShareAppMessage中没有参数，或是在onShareTimeline中需要取自定义query
     if (isEmpty(parsedQeury)) {
       parsedQeury = qsParse(result.query ?? '') || {};
+      compact(keys(parsedQeury)).forEach((key) => {
+        // 删除从默认页面的query中原有的utm参数，防止带入到下一次分享导致渠道统计错误（如果客户质疑参数被删，让他们自己拼回去或者关followshare）
+        if (key.toLowerCase().startsWith('utm_')) {
+          unset(parsedQeury, key);
+        }
+      });
     }
 
     // 以上两种都是自定义的地址和参数，不做处理直接用，防止出现encode/decode的问题。
@@ -117,6 +140,20 @@ class MinipPage implements MinipPageType {
     result.path = normalPath(path + (queryString ? `?${queryString}` : ''));
     result.query = queryString;
     return result;
+  };
+
+  // 给事件合并页面属性
+  eventSetPageProps = (trackingId: string, event: EVENT) => {
+    const pageProps = niceTry(() => this.pageProps[trackingId][this.path]);
+    if (!isEmpty(pageProps)) {
+      return limitObject(
+        getDynamicAttributes({
+          ...event.attributes,
+          ...pageProps
+        })
+      );
+    }
+    return event.attributes;
   };
 }
 

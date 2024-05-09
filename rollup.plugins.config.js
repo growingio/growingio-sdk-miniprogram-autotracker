@@ -1,4 +1,5 @@
 // @ts-nocheck
+import * as packageJson from './package.json';
 import { babel } from '@rollup/plugin-babel';
 import { terser } from 'rollup-plugin-terser';
 import alias from '@rollup/plugin-alias';
@@ -6,6 +7,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import filesize from 'rollup-plugin-filesize';
 import path from 'path';
 import resolve from '@rollup/plugin-node-resolve';
+import replace from '@rollup/plugin-replace';
 import typescript from '@rollup/plugin-typescript';
 
 const fs = require('fs');
@@ -42,6 +44,9 @@ const configGenerat = ({ input, output, name }) => ({
     name
   },
   plugins: [
+    replace({
+      __PLUGIN_VERSION__: packageJson.version || '0.0.1'
+    }),
     alias({
       entries: {
         '@@': path.resolve(__dirname, 'src')

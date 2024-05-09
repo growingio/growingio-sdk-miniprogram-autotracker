@@ -1,4 +1,5 @@
 import {
+  forEach,
   isArray,
   isEmpty,
   isFunction,
@@ -205,15 +206,58 @@ class GrowingIO implements GrowingIOType {
 
   // 设置页面属性
   setPageAttributes = (trackingId: string, properties: any) => {
-    const { currentPage } = this.dataStore.eventHooks;
-    if (isEmpty(currentPage.pageProps[trackingId])) {
-      currentPage.pageProps[trackingId] = {};
+    if (isObject(properties) && !isEmpty(properties)) {
+      const { currentPage } = this.dataStore.eventHooks;
+      if (isEmpty(currentPage.pageProps[trackingId])) {
+        currentPage.pageProps[trackingId] = {};
+      }
+      if (isEmpty(currentPage.pageProps[trackingId][currentPage.path])) {
+        currentPage.pageProps[trackingId][currentPage.path] = {};
+      }
+      // 结果合并，动态属性不作处理
+      if (!isEmpty(properties)) {
+        forEach(properties, (v, k) => {
+          if (
+            !isFunction(
+              currentPage.pageProps[trackingId][currentPage.path][k]
+            ) ||
+            isFunction(v)
+          ) {
+            currentPage.pageProps[trackingId][currentPage.path][k] = v;
+          }
+        });
+      }
+      return true;
+    } else {
+      callError('setPageAttributes');
+      return false;
     }
-    if (!isEmpty(properties)) {
-      currentPage.pageProps[trackingId] = {
-        ...currentPage.pageProps[trackingId],
-        ...limitObject(properties)
-      };
+  };
+
+  // 清空已设置的页面属性
+  clearPageAttributes = (
+    trackingId: string,
+    properties: string[] | undefined
+  ) => {
+    try {
+      if (
+        !isEmpty(this.dataStore.eventHooks.currentPage.pageProps[trackingId])
+      ) {
+        const { currentPage } = this.dataStore.eventHooks;
+        if (isArray(properties) && !isEmpty(properties)) {
+          properties.forEach((propName: string) => {
+            unset(
+              currentPage.pageProps[trackingId][currentPage.path],
+              propName
+            );
+          });
+        } else {
+          currentPage.pageProps[trackingId][currentPage.path] = {};
+        }
+      }
+    } catch (error) {
+      callError('clearPageAttributes');
+      return false;
     }
   };
 
@@ -261,14 +305,17 @@ class GrowingIO implements GrowingIOType {
 
   // 发送用户属性
   setUserAttributes = (trackingId: string, userAttributes: any) => {
-    if (!isEmpty(userAttributes) && isObject(userAttributes)) {
+    if (isObject(userAttributes) && !isEmpty(userAttributes)) {
       const { eventContextBuilder, eventInterceptor, lastVisitEvent } =
         this.dataStore;
       const event = {
         eventType: 'LOGIN_USER_ATTRIBUTES',
-        attributes: limitObject(userAttributes),
         ...eventContextBuilder(trackingId)
       };
+      event.attributes = limitObject({
+        ...(event.attributes ?? {}),
+        ...getDynamicAttributes(userAttributes)
+      });
       // 该方法很可能被放在在app的onShow中的wx.login异步回调中，
       // 此时页面的path和query可能还没取到，就拿visit事件的path和query补上
       if (!event.path) {
@@ -321,13 +368,20 @@ class GrowingIO implements GrowingIOType {
     this.userStore.setUserKey(trackingId, undefined);
   };
 
-  // 设置埋点事件的通用属性（即每个埋点事件都会带上的属性值）
+  // 设置全局通用属性（即每个事件都会带上的属性值）
   setGeneralProps = (trackingId: string, properties: any) => {
-    if (!isEmpty(properties)) {
-      this.dataStore.generalProps[trackingId] = {
-        ...(this.dataStore.generalProps[trackingId] ?? {}),
-        ...properties
-      };
+    if (isObject(properties) && !isEmpty(properties)) {
+      if (isEmpty(this.dataStore.generalProps[trackingId])) {
+        this.dataStore.generalProps[trackingId] = {};
+      }
+      forEach(properties, (v, k) => {
+        if (
+          !isFunction(this.dataStore.generalProps[trackingId][k]) ||
+          isFunction(v)
+        ) {
+          this.dataStore.generalProps[trackingId][k] = v;
+        }
+      });
       return true;
     } else {
       callError('setGeneralProps');
@@ -335,14 +389,13 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 清空已设置的埋点事件的通用属性
+  // 清空已设置的全局通用属性
   clearGeneralProps = (
     trackingId: string,
     properties: string[] | undefined
   ) => {
     try {
       if (!isEmpty(this.dataStore.generalProps[trackingId])) {
-        // 获取目标tracker的引用
         if (isArray(properties) && !isEmpty(properties)) {
           properties.forEach((propName: string) => {
             unset(this.dataStore.generalProps[trackingId], propName);
@@ -352,7 +405,7 @@ class GrowingIO implements GrowingIOType {
         }
       }
     } catch (error) {
-      callError('setGeneralProps');
+      callError('clearGeneralProps');
       return false;
     }
   };
@@ -360,22 +413,22 @@ class GrowingIO implements GrowingIOType {
   // 自定义埋点事件
   track = (
     trackingId: string,
-    name: string,
+    eventName: string,
     properties: { [key: string]: string | string[] }
   ) => {
-    eventNameValidate(name, () => {
-      const { eventContextBuilder, eventInterceptor, generalProps } =
-        this.dataStore;
-      const mergedProperties = {
-        ...(generalProps[trackingId] ?? {}),
-        ...(isObject(properties) && !isEmpty(properties) ? properties : {})
-      };
+    eventNameValidate(eventName, () => {
+      const { eventContextBuilder, eventInterceptor } = this.dataStore;
       const event = {
         eventType: 'CUSTOM',
-        eventName: name,
-        attributes: limitObject(getDynamicAttributes(mergedProperties)),
+        eventName,
         ...eventContextBuilder(trackingId)
       };
+      event.attributes = limitObject({
+        ...(event.attributes ?? {}),
+        ...getDynamicAttributes({
+          ...(isObject(properties) && !isEmpty(properties) ? properties : {})
+        })
+      });
       // 埋点事件要保留'&&sendTo'字段用于多实例复制发送
       if (
         this.plugins.gioMultipleInstances &&
@@ -453,12 +506,15 @@ class GrowingIO implements GrowingIOType {
         const event = {
           eventType: 'CUSTOM',
           eventName: timer.eventName,
-          attributes: limitObject({
-            ...properties,
-            event_duration: timer.leng > maxEnd ? 0 : timer.leng / 1000
-          }),
           ...eventContextBuilder(trackingId)
         };
+        event.attributes = limitObject({
+          ...(event.attributes ?? {}),
+          ...getDynamicAttributes({
+            ...(isObject(properties) && !isEmpty(properties) ? properties : {}),
+            event_duration: timer.leng > maxEnd ? 0 : timer.leng / 1000
+          })
+        });
         // 埋点事件要保留'&&sendTo'字段用于多实例复制发送
         if (
           this.plugins.gioMultipleInstances &&

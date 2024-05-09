@@ -1,5 +1,4 @@
 import { PlatformConfigType } from '@@/types/platforms';
-import { niceTry } from '@@/utils/tools';
 
 const Config: PlatformConfigType = {
   scnPrefix: '',

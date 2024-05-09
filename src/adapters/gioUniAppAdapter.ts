@@ -9,9 +9,11 @@ const ONCE = '~';
 const CUSTOM = '^';
 let ut;
 class GioUniAppAdapter {
+  public pluginVersion: string;
   private uniVue: any;
   private exposedNames: any;
   constructor(public growingIO: GrowingIOType) {
+    this.pluginVersion = '__PLUGIN_VERSION__';
     ut = this.growingIO.utils;
     this.uniVue = this.growingIO?.vdsConfig?.uniVue;
     this.exposedNames = {};

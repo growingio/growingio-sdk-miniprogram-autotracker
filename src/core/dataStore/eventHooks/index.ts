@@ -118,7 +118,12 @@ class EventHooks implements EventHooksType {
           if (eventName === 'onShareAppMessage') {
             // 先执行分享的生命周期拿到分享数据
             // 与基础库保持一致，没有返回值时默认使用{}
-            result = (await method.apply(this, args)) ?? {};
+            result = method.apply(this, args) ?? {};
+            // 如果分享事件是个promise函数，需要等待异步结果
+            if (typeOf(result) === 'promise') {
+              result = await result.then((r) => r);
+            }
+            // 如果返回的对象中包含promise，要等待异步结果
             if (typeOf(result.promise) === 'promise') {
               const f = async function () {
                 let sRes = result;

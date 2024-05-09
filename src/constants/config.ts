@@ -67,6 +67,7 @@ export const DIRECT_HANDLERS = [
 // 多实例的方法
 export const INSTANCE_HANDLERS = [
   'clearGeneralProps', // 清除埋点通用属性
+  'clearPageAttributes', // 清除页面属性
   'clearTrackTimer', // 清除所有事件计时器
   'clearUserId', // 清除用户id
   'getABTest', // 获取AB实验数据

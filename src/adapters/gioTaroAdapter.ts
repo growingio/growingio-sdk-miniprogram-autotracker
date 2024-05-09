@@ -26,12 +26,14 @@ const CUSTOM_HOOK_EVENTS = [
   'onTabItemTap'
 ];
 class GioTaroAdapter {
+  public pluginVersion: string;
   public taroVersion: string;
   private taro: any;
   private taroVue: any;
   private taroVueVersion: number;
   private exposedNames: any;
   constructor(public growingIO: GrowingIOType) {
+    this.pluginVersion = '__PLUGIN_VERSION__';
     const { utils, emitter, minipInstance } = this.growingIO;
     ut = utils;
     this.exposedNames = {};

@@ -5,9 +5,11 @@
 import { GrowingIOType } from '@@/types/growingIO';
 
 class GioCompress {
+  public pluginVersion: string;
   private f;
   private _compress;
   constructor(public growingIO: GrowingIOType) {
+    this.pluginVersion = '__PLUGIN_VERSION__';
     this.f = String.fromCharCode;
     this._compress = function (uncompressed, bitsPerChar, getCharFromInt) {
       if (uncompressed === null) return '';

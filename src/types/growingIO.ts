@@ -6,6 +6,15 @@ import { UploaderType } from '@@/types/uploader';
 import { UserStoreType } from '@@/types/userStore';
 
 export interface GrowingIOType {
+  // 工具类
+  utils?: any;
+  // 监听器
+  emitter: {
+    emit?: (msg: string, args?: any) => void;
+    on?: (msg: string, method: (args?: any) => any) => void;
+    once?: (msg: string, method: (args?: any) => any) => void;
+    off?: (msg: string, method: (args?: any) => any) => void;
+  };
   // 小程序平台
   gioPlatform: PLATFORMTYPES;
   // 标记当前小程序是什么框架
@@ -54,6 +63,30 @@ export interface GrowingIOType {
   setOption: (trackingId: string, optionKey: string, value: any) => void;
   // 运行中获取配置
   getOption: (trackingId: string, optionKey?: string) => any;
+  // 设置页面属性
+  setPageAttributes: (trackingId: string, properties: any) => void;
+  // 清空已设置的页面属性
+  clearPageAttributes: (
+    trackingId: string,
+    properties: string[] | undefined
+  ) => void;
+  // 手动发page
+  sendPage: (trackingId: string, props?: any) => void;
+  // 设置openId作为uid
+  identify?: (trackingId: string, openId: string) => void;
+  // 发送用户变量
+  setUserAttributes?: (trackingId: string, userAttributes: any) => void;
+  // 设置登录用户Id
+  setUserId?: (trackingId: string, userId: string, userKey?: string) => void;
+  // 清除登录用户Id
+  clearUserId?: (trackingId: string) => void;
+  // 设置全局通用属性
+  setGeneralProps?: (trackingId: string, properties: any) => void;
+  // 清除已设置的全局通用属性
+  clearGeneralProps?: (
+    trackingId: string,
+    properties: string[] | undefined
+  ) => void;
   // 创建自定义埋点事件
   track?: (
     trackingId: string,
@@ -61,56 +94,42 @@ export interface GrowingIOType {
     properties: { [key: string]: string },
     items?: { key: string; id: string; attributes?: { [key: string]: string } }
   ) => void;
-  // 设置登录用户Id
-  setUserId?: (trackingId: string, userId: string, userKey?: string) => void;
-  // 清除登录用户Id
-  clearUserId?: (trackingId: string) => void;
-  // 设置openId作为uid
-  identify?: (trackingId: string, openId: string) => void;
-  // 发送用户变量
-  setUserAttributes?: (trackingId: string, userAttributes: any) => void;
-  // 初始化回调
-  initCallback?: () => void;
-  // 错误提示
-  callError?: (fn: string, type?: boolean, msg?: string) => void;
-  // 工具类
-  utils?: any;
-  // 事件转换
-  eventConverter?: (event: any) => void;
-  // 事件拦截器
-  eventInterceptor?: (event: any) => void;
-  // 设置埋点通用属性
-  setGeneralProps?: (trackingId: string, properties: any) => void;
-  // 清除已设置的埋点通用属性
-  clearGeneralProps?: (
+  // 初始化事件计时器
+  trackTimerStart: (trackingId: string, eventName: string) => any;
+  // 暂停事件计时器
+  trackTimerPause: (trackingId: string, timerId: string) => boolean;
+  // 恢复事件计时器
+  trackTimerResume: (trackingId: string, timerId: string) => boolean;
+  // 停止事件计时器并上报事件
+  trackTimerEnd: (
     trackingId: string,
-    properties: string[] | undefined
-  ) => void;
-  // 手动更新曝光监听
-  updateImpression?: (collect?: any) => void;
+    timerId: string,
+    properties: any
+  ) => boolean;
+  // 移除事件计时器
+  removeTimer: (trackingId: string, timerId: string) => boolean;
   // 清除所有事件计时器
-  clearTrackTimer?: (trackingId: string) => void;
+  clearTrackTimer: (trackingId: string) => void;
   // 手动获取位置信息补发visit上报
   setLocation: (
     trackingId: string,
     latitude: number,
     longitude: number
   ) => void;
-  // 获取打通信息
-  getGioInfo: (trackingId: string) => string;
+  // 手动更新曝光监听
+  updateImpression?: (collect?: any) => void;
   // 获取ABTest数据
   getABTest?: (
     trackingId: string,
     layerId: string,
     callback?: (arg: any) => any
   ) => void;
-
-  emitter: {
-    emit?: (msg: string, args?: any) => void;
-    on?: (msg: string, method: (args?: any) => any) => void;
-    once?: (msg: string, method: (args?: any) => any) => void;
-    off?: (msg: string, method: (args?: any) => any) => void;
-  };
+  // 获取打通信息
+  getGioInfo: (trackingId: string) => string;
+  // 初始化回调
+  initCallback?: () => void;
+  // 错误提示
+  callError?: (fn: string, type?: boolean, msg?: string) => void;
   GioApp?: any;
   GioPage?: any;
   GioComponent?: any;

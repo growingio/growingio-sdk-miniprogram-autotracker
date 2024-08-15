@@ -13,7 +13,6 @@ import {
   isBoolean,
   isEmpty,
   isFunction,
-  isNil,
   isString,
   keys,
   typeOf,
@@ -94,7 +93,7 @@ class DataStore implements DataStoreType {
       EMIT_MSG.ON_COMMIT_REQUEST,
       ({ eventData: event, trackingId }) => {
         if (event.eventType === 'VISIT') {
-          this.lastVisitEvent = event;
+          this.lastVisitEvent[trackingId] = event;
         }
         if (event.eventType === 'PAGE') {
           this.lastPageEvent[trackingId] = event;
@@ -219,26 +218,25 @@ class DataStore implements DataStoreType {
   };
 
   // 保存初始来源信息
-  setOriginalSource = (trackingId: string, { path, query }) => {
+  setOriginalSource = (trackingId: string, origins: any) => {
     const { minipInstance } = this.growingIO;
-    if (isNil(this.getOriginalSource(trackingId))) {
-      const originalSource = { path, query, title: '' };
-      minipInstance.setStorageSync(
-        this.getStorageKey(trackingId, 'originalSource'),
-        JSON.stringify(originalSource)
-      );
-    }
+    minipInstance.setStorageSync(
+      this.getStorageKey(trackingId, 'originalSource'),
+      JSON.stringify(origins)
+    );
   };
 
   // 获取初始来源信息
   getOriginalSource = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
-    return niceTry(() =>
-      JSON.parse(
-        minipInstance.getStorageSync(
-          this.getStorageKey(trackingId, 'originalSource')
+    return (
+      niceTry(() =>
+        JSON.parse(
+          minipInstance.getStorageSync(
+            this.getStorageKey(trackingId, 'originalSource')
+          )
         )
-      )
+      ) ?? {}
     );
   };
 
@@ -263,12 +261,14 @@ class DataStore implements DataStoreType {
     const { platformConfig, inPlugin, minipInstance, plugins } = this.growingIO;
     const { uniVue, taro } = vdsConfig;
     // 如果是使用全量版本时，当前小程序不是框架的，要允许原生的hook
-    if (!(uniVue || taro)) {
+    if (!(uniVue || taro || minipInstance.platform === 'quickapp')) {
       platformConfig.canHook = true;
     }
     // 初始化核心钩子（重写全局）
     if (!inPlugin || ['tbp', 'jdp'].includes(minipInstance.platform)) {
       this.eventHooks.initEventHooks();
+    } else {
+      this.eventHooks.initOriginalValue();
     }
     /** 第三方框架重写 */
     // uniapp
@@ -365,19 +365,11 @@ class DataStore implements DataStoreType {
       this.updateVdsConfig(trackingId, { ...trakerVds, [k]: v });
       // 从关闭到打开dataCollect时补发visit和page
       if (k === 'dataCollect' && prevConfig.dataCollect !== v && v) {
+        // 更新session
         userStore.setSessionId(trackingId);
-        const { path, query, settedTitle } = this.eventHooks.currentPage;
-        // 重新获取页面title，防止切换配置前修改了title没取到
-        this.eventHooks.currentPage.title =
-          settedTitle[path] ||
-          this.growingIO.minipInstance.getPageTitle(
-            this.growingIO.minipInstance.getCurrentPage()
-          );
-        // visit取当前页面值
-        this.sendVisit(trackingId, { path, query });
-        // 要重设一次页面时间，防止比visit早
-        this.eventHooks.currentPage.time = Date.now();
-        this.sendPage(trackingId, { path, query });
+        // 重发visit/page
+        this.sendVisit(trackingId);
+        this.sendPage(trackingId);
       }
       // 配置项有变更要全局广播
       emitter.emit(EMIT_MSG.OPTION_CHANGE, { optionName: k, optionValue: v });
@@ -431,10 +423,7 @@ class DataStore implements DataStoreType {
 
   // 手动调用visit事件的方法
   sendVisit = (trackingId: string, props?: any) => {
-    (this.eventHooks.appEffects as any).buildVisitEvent(
-      trackingId,
-      props ?? this.lastVisitEvent
-    );
+    (this.eventHooks.appEffects as any).buildVisitEvent(trackingId, props);
   };
 
   // 手动调用page事件的方法
@@ -482,6 +471,26 @@ class DataStore implements DataStoreType {
     }
   };
 
+  // 事件重组
+  eventRefactor = (e: any) => {
+    // 有的事件的path和query不能再用页面的值，所以直接使用事件中已有的值
+    const ne = {
+      ...e,
+      ...this.eventContextBuilder(e.trackingId, {
+        path: e.path,
+        query: e.query,
+        // page事件需要使用事件中原有的时间戳，其他事件也要用原来的时间戳保证事件的准确性
+        timestamp: e.timestamp
+      })
+    };
+    // 防止事件原有的属性被通用属性直接覆盖
+    ne.attributes = {
+      ...(ne.attributes ?? {}),
+      ...(e.attributes ?? {})
+    };
+    return ne;
+  };
+
   // 事件拦截器（有的通用维度字段需要异步获取，为了防止事件在通用维度还没返回之前就发出去）一般只有最开始的个别事件会被拦住
   eventInterceptor = (event: any) => {
     const { systemInfo, network } = this.growingIO.minipInstance;
@@ -491,17 +500,7 @@ class DataStore implements DataStoreType {
     } else if (!isEmpty(this.interceptEvents)) {
       // 有通用维度字段了，且有被拦截的事件，放一起重新添加通用维度字段再提交转换
       [...this.interceptEvents, event].forEach((e: any) => {
-        // 有的事件的path和query不能再用页面的值，所以直接使用事件中已有的值
-        const ne = {
-          ...e,
-          ...this.eventContextBuilder(event.trackingId, {
-            path: e.path,
-            query: e.query,
-            // page事件需要使用事件中原有的时间戳，其他事件也要用原来的时间戳保证事件的准确性
-            timestamp: e.timestamp
-          })
-        };
-        this.eventConverter(ne);
+        this.eventConverter(this.eventRefactor(e));
       });
       this.interceptEvents = [];
     } else {
@@ -517,17 +516,7 @@ class DataStore implements DataStoreType {
     } = this.growingIO;
     if (systemInfo && network && !isEmpty(this.interceptEvents)) {
       [...this.interceptEvents].forEach((e: any) => {
-        // 有的事件的path和query不能再用页面的值，所以直接使用事件中已有的值
-        const ne = {
-          ...e,
-          ...this.eventContextBuilder(e.trackingId, {
-            path: e.path,
-            query: e.query,
-            // page事件需要使用事件中原有的时间戳，其他事件也要用原来的时间戳保证事件的准确性
-            timestamp: e.timestamp
-          })
-        };
-        this.eventConverter(ne);
+        this.eventConverter(this.eventRefactor(e));
       });
       this.interceptEvents = [];
     }

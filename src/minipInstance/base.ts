@@ -7,7 +7,14 @@ import {
   SystemInfo
 } from '@@/types/minipInstance';
 import { PLATFORMS } from '@@/types/platforms';
-import { isFunction, isObject, isString, last } from '@@/utils/glodash';
+import {
+  isFunction,
+  isObject,
+  isString,
+  last,
+  typeOf,
+  isEmpty
+} from '@@/utils/glodash';
 import EMIT_MSG from '@@/constants/emitMsg';
 import {
   limitString,
@@ -126,36 +133,56 @@ class BaseInstance implements MinipInstanceType {
 
   // 获取页面标题
   getPageTitle = (page) => {
+    const platform = getPlainPlatform();
     let title = '';
-    const instConfig = getPlainConfig(getPlainPlatform());
-    try {
-      // 第一优先级在base中的hook setNavigationBarTitle设置的值
-      // 第二优先级支持客户自己在页面中设置页面title
-      const data = page?.data || page.$data || {};
-      title = isString(data?.gioPageTitle) ? data?.gioPageTitle : '';
-      // 第三优先级取页面的navigationBarTitleText
-      if (title.length === 0) {
-        const pageInfo =
-          instConfig.page[page.route] || instConfig.page[`${page.route}.html`];
-        if (pageInfo) {
-          title = pageInfo.window.navigationBarTitleText;
-        } else {
-          title = instConfig.global.window.navigationBarTitleText;
+    let instConfig = getPlainConfig(platform);
+    if (typeOf(instConfig) === 'string') {
+      instConfig = niceTry(() => JSON.parse(instConfig)) ?? {};
+    }
+    // 第一优先级在base中的hook setNavigationBarTitle设置的值(在dataStore page实例中实现)
+    // 第二优先级支持客户自己在页面中设置页面title
+    const data = page?.data || page.$data || {};
+    title = isString(data?.gioPageTitle) ? data?.gioPageTitle : '';
+    if (instConfig) {
+      // 第三优先级app生命周期中拿不到page对象，拿生命周期的参数来匹配
+      const { enterParams } = this.growingIO.dataStore.eventHooks.appEffects;
+      if (!page.route && !isEmpty(enterParams)) {
+        page.route = enterParams.path || '';
+        title = this._getTitleFromTabbar(instConfig, page.route);
+      }
+      // 第四优先级取页面的navigationBarTitleText
+      niceTry(() => {
+        if (!title) {
+          const instPage = instConfig.page || {};
+          const pageInfo =
+            instPage[page.route] || instPage[`${page.route}.html`];
+          if (pageInfo) {
+            title = pageInfo?.window?.navigationBarTitleText;
+          } else if (['wx', 'tt'].includes(platform)) {
+            title = (instConfig || global || $global)?.global?.window
+              ?.navigationBarTitleText;
+          } else {
+            title = (instConfig || global || $global)?.window
+              ?.navigationBarTitleText;
+          }
         }
+      });
+      // 第五优先级取tabBar配置
+      if (!title) {
+        title = this._getTitleFromTabbar(instConfig, page.route);
       }
-      // 第四优先级取tabBar配置
-      if (title.length === 0) {
-        const tabPage = instConfig?.tabBar?.list?.find((p) => {
-          return (
-            p.pagePath === page.route || p.pagePath === `${page.route}.html`
-          );
-        });
-        title = tabPage?.text || '';
-      }
-    } catch (e) {
-      return '';
     }
     return limitString(title);
+  };
+
+  private _getTitleFromTabbar = (
+    instConfig: any,
+    pageRoute: string
+  ): string => {
+    const tabPage = instConfig?.tabBar?.list?.find((p) => {
+      return p.pagePath === pageRoute || p.pagePath === `${pageRoute}.html`;
+    });
+    return tabPage?.text || '';
   };
 
   /**

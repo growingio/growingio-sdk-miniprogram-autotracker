@@ -16,6 +16,7 @@ import {
   split,
   startsWith,
   toString,
+  typeOf,
   unset
 } from '@@/utils/glodash';
 
@@ -239,11 +240,15 @@ export const getPlainConfig = (platform?: string) => {
       case 'swan':
         return appConfig;
       case 'tt':
-        return __ttConfig;
+        return (
+          niceTry(() => __ttConfig) ||
+          global?.TMAConfig ||
+          globalThis?.TMAConfig
+        ); // 可能会拿不到
       case 'qq':
         return __qqConfig;
       case 'ks':
-        return __ksConfig;
+        return __ksConfig; // 新版快手小程序已经拿不到了
       case 'jd':
         return __jdConfig;
       // 第三方框架下自动获取实例
@@ -296,7 +301,10 @@ export const getAppInst = () => {
 };
 
 export const getGlobal = () => {
-  return niceTry(() => $global) ?? global;
+  return (
+    niceTry(() => niceTry(() => niceTry(() => $global) ?? global) ?? window) ??
+    globalThis
+  );
 };
 
 // Object参数限制
@@ -406,4 +414,15 @@ export const hashCode = (string: string, abs = false) => {
     i++;
   }
   return abs ? Math.abs(hash) : hash;
+};
+
+// 获取额外的启动参数并合并进query
+export const getLaunchQuery = (originQuery: any = {}, extraData: any = {}) => {
+  const validData = {};
+  keys(extraData).forEach((k: string) => {
+    if (['string', 'number', 'boolean'].includes(typeOf(extraData[k]))) {
+      validData[k] = extraData[k];
+    }
+  });
+  return Object.assign({}, validData, originQuery);
 };

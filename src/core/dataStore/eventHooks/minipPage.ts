@@ -16,16 +16,14 @@ import {
   qsParse,
   niceTry,
   getDynamicAttributes,
-  limitObject
+  limitObject,
+  getLaunchQuery
 } from '@@/utils/tools';
 import { EVENT } from '@@/types/base';
 
 class MinipPage implements MinipPageType {
-  public path: string;
-  public time: number;
-  public query: any;
-  // 页面title (优先级：setNavigationBarTitle > data.gioPageTitle[不保证能取到] > config.js中设置的值 > tabBar配置)
-  public title: string;
+  // 根据页面存储的页面参数
+  public queryOption: any;
   // 通过调用wx.setNavigationBarTitle设置的title
   public settedTitle: any;
   // 页面级属性
@@ -36,48 +34,108 @@ class MinipPage implements MinipPageType {
   public currentLifecycle: string;
 
   constructor(public growingIO: GrowingIOType) {
-    this.query = undefined;
+    this.queryOption = {};
     this.settedTitle = {};
     this.pageProps = {};
   }
 
-  // 存储页面参数
-  parsePage = (page: any, query: any) => {
-    // wx/my取route; swan取uri; tt取__route__; qq无值
-    const path =
-      page.route || page.uri || page.__route__ || page?.$page?.fullPath || '';
-    if (!isEmpty(query)) {
-      this.query = this.getQuery(query);
+  // 获取页面地址
+  getPagePath = () => {
+    const { minipInstance, inPlugin, dataStore, trackingId } = this.growingIO;
+    const path = minipInstance.getCurrentPath();
+    if (inPlugin) {
+      const vds = dataStore.getTrackerVds(trackingId);
+      // 插件中没有页面时直接将插件appId作为页面信息
+      return path || `/插件${vds.appId}`;
     } else {
-      this.query = undefined;
-    }
-    if (this.path !== path) {
-      this.time = Date.now();
-    }
-    this.path = path;
-    this.title =
-      // 如果在parse前（onLoad）动态设置了title，则优先获取动态设置的值
-      this.settedTitle[this.path] ||
-      this.growingIO.minipInstance.getPageTitle(
-        page || this.growingIO.minipInstance.getCurrentPage()
+      return (
+        path ||
+        dataStore.eventHooks.appEffects.enterParams?.path ||
+        // 作为页面组件时component created生命周期中的埋点会取不到页面堆栈，所以拿最近的一个page事件中的页面信息做兜底
+        dataStore.lastPageEvent[trackingId]?.path ||
+        // 没有最近的一个page事件说明在app初始化的生命周期中，有些框架可能会有异步处理逻辑导致事件触发比visit晚，则使用visit事件中的页面信息兜底
+        dataStore.lastVisitEvent[trackingId]?.path
       );
+    }
   };
 
   // 获取页面参数
-  getQuery = (query: any) => {
+  getPageQeury = () => {
+    const { minipInstance, dataStore, trackingId } = this.growingIO;
+    const stackPage = minipInstance.getCurrentPage();
+    const stackPath = minipInstance.getCurrentPath();
+    const { enterParams = {} } = dataStore.eventHooks.appEffects;
+    if (stackPath) {
+      const pageParams = stackPage.options ?? stackPage.$taroParams;
+      // 堆栈中有页面信息，则使用堆栈中的页面参数
+      if (!isEmpty(pageParams)) {
+        // 删掉taro框架中自带的字段
+        unset(pageParams, '$taroTimestamp');
+        // 有页面解析的option直接取
+        return this.qsQuery(pageParams);
+      } else if (!isEmpty(this.queryOption[stackPath])) {
+        // 没有option从hook获取的生命周期参数中取
+        return this.qsQuery(this.queryOption[stackPath]);
+      } else if (stackPath === enterParams.path) {
+        // 某些小程序虽然有页面堆栈，但是页面还没加载完，兜底取启动参数
+        return this.qsQuery(
+          getLaunchQuery(
+            enterParams?.query,
+            enterParams?.referrerInfo?.extraData
+          )
+        );
+      }
+    } else if (enterParams.path) {
+      // 堆栈中没有页面信息，但启动参数中有，说明是小程序刚启动还没加载页面，直接取启动参数
+      return this.qsQuery(
+        getLaunchQuery(enterParams?.query, enterParams?.referrerInfo?.extraData)
+      );
+    } else {
+      // 作为页面组件时component created生命周期中的埋点会取不到页面堆栈，所以拿最近的一个page事件中的页面信息做兜底
+      return dataStore.lastPageEvent[trackingId]?.path
+        ? dataStore.lastPageEvent[trackingId]?.query
+        : // 没有最近的一个page事件说明在app初始化的生命周期中，有些框架可能会有异步处理逻辑导致事件触发比visit晚，则使用visit事件中的页面信息兜底
+          dataStore.lastVisitEvent[trackingId]?.query;
+    }
+  };
+
+  // 获取页面标题
+  // 页面title (优先级：setNavigationBarTitle > data.gioPageTitle[不保证能取到] > config.js中设置的值 > tabBar配置)
+  getPageTitle = (trackingId?: string) => {
+    const { minipInstance, inPlugin, dataStore } = this.growingIO;
+    const path = minipInstance.getCurrentPath();
+    const title =
+      this.settedTitle[path] ||
+      minipInstance.getPageTitle(minipInstance.getCurrentPage());
+    if (inPlugin) {
+      const vds = dataStore.getTrackerVds(
+        trackingId || this.growingIO.trackingId
+      );
+      // 插件中没有页面时直接将插件appId作为页面信息
+      return (
+        title || `/插件${vds.appId}${path ? '_' + last(path.split('/')) : ''}`
+      );
+    } else {
+      return title;
+    }
+  };
+
+  // 格式化页面参数
+  qsQuery = (query = {}) => {
     const filtQeury = { ...query };
     unset(filtQeury, 'wxShoppingListScene');
     return qsStringify(filtQeury);
   };
 
-  // 获取上一个页面路径
+  // 获取页面来源
   getReferralPage = (trackingId: string) => {
     const {
       minipInstance,
-      dataStore: { lastPageEvent, scene }
+      dataStore: { lastPageEvent, scene, eventHooks }
     } = this.growingIO;
     return (
       lastPageEvent[trackingId]?.path ||
+      eventHooks.appEffects.enterParams?.referrerInfo?.appId ||
       (scene ? `scn:${minipInstance.scnPrefix}${scene}` : null)
     );
   };
@@ -89,7 +147,7 @@ class MinipPage implements MinipPageType {
     // 自定义path的地址参数截取（onShareAppMessage中的页面参数是拼在地址中的）
     const customSplit = splitPath(result.path ?? '');
 
-    let path = this.path;
+    let path = this.getPagePath();
     let parsedQeury: any = {};
     let resultHasPath = has(result, 'path');
     // 优先使用自定义的地址
@@ -114,7 +172,9 @@ class MinipPage implements MinipPageType {
     // 自定义query没有值则使用当前页面默认参数
     // 如果path存在，但是不携带参数，此时不使用当前页面的默认参数
     if (!resultHasPath && isEmpty(parsedQeury)) {
-      parsedQeury = qsParse(this.query ?? '') || {};
+      const stackPage = this.growingIO.minipInstance.getCurrentPage();
+      parsedQeury =
+        stackPage.options || this.queryOption[stackPage.route] || {};
     }
 
     return [path, qsStringify(parsedQeury)];
@@ -144,7 +204,9 @@ class MinipPage implements MinipPageType {
 
   // 给事件合并页面属性
   eventSetPageProps = (trackingId: string, event: EVENT) => {
-    const pageProps = niceTry(() => this.pageProps[trackingId][this.path]);
+    const pageProps = niceTry(
+      () => this.pageProps[trackingId][this.getPagePath()]
+    );
     if (!isEmpty(pageProps)) {
       return limitObject(
         getDynamicAttributes({

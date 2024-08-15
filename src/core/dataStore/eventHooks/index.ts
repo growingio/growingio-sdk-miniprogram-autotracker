@@ -304,15 +304,25 @@ class EventHooks implements EventHooksType {
     });
   };
 
-  growingApp = (app: any) => this.originalApp(this.appOverriding(app));
+  growingApp = (app: any) =>
+    isFunction(this.originalApp)
+      ? this.originalApp(this.appOverriding(app))
+      : this.appOverriding(app);
 
-  growingPage = (page: any) => this.originalPage(this.pageOverriding(page));
+  growingPage = (page: any) =>
+    isFunction(this.originalPage)
+      ? this.originalPage(this.pageOverriding(page))
+      : this.pageOverriding(page);
 
   growingComponent = (component: any) =>
-    this.originalComponent(this.componentOverriding(component));
+    isFunction(this.originalComponent)
+      ? this.originalComponent(this.componentOverriding(component))
+      : this.componentOverriding(component);
 
   growingBehavior = (behavior: any) =>
-    this.originalBehavior(this.componentOverriding(behavior));
+    isFunction(this.originalBehavior)
+      ? this.originalBehavior(this.componentOverriding(behavior))
+      : this.componentOverriding(behavior);
 
   nativeGrowing = (
     designated: string[] = ['App', 'Page', 'Component', 'Behavior']
@@ -320,15 +330,12 @@ class EventHooks implements EventHooksType {
     const self = this;
     const { platformConfig } = this.growingIO;
     const platformHooks = platformConfig.hooks;
-    this.setAppEffectCbs();
-    this.setPageEffectCbs();
     if (designated.includes('App')) {
       try {
         // 重写App
         if (platformHooks.App && !this.appHooked) {
-          this.originalApp = App || global.App || function () {};
           App = function (...args) {
-            return self.growingApp(args[0]);
+            return self.originalApp(self.appOverriding(args[0]));
           };
           this.appHooked = true;
         }
@@ -340,9 +347,8 @@ class EventHooks implements EventHooksType {
       try {
         // 重写Page
         if (platformHooks.Page && !this.pageHooked) {
-          this.originalPage = Page || global.Page || function () {};
           Page = function (...args) {
-            return self.growingPage(args[0]);
+            return self.originalPage(self.pageOverriding(args[0]));
           };
           this.pageHooked = true;
         }
@@ -354,10 +360,8 @@ class EventHooks implements EventHooksType {
       try {
         // 重写Component
         if (platformHooks.Component && !this.componentHooked) {
-          this.originalComponent =
-            Component || global.Component || function () {};
           Component = function (...args) {
-            return self.growingComponent(args[0]);
+            return self.originalComponent(self.componentOverriding(args[0]));
           };
           this.componentHooked = true;
         }
@@ -369,9 +373,8 @@ class EventHooks implements EventHooksType {
       try {
         // 重写Behavior
         if (platformHooks.Behavior && !this.behaviorHooked) {
-          this.originalBehavior = Behavior || global.Behavior || function () {};
           Behavior = function (...args) {
-            return self.growingBehavior(args[0]);
+            return self.originalBehavior(self.componentOverriding(args[0]));
           };
           this.behaviorHooked = true;
         }
@@ -381,26 +384,39 @@ class EventHooks implements EventHooksType {
     }
   };
 
-  // 初始化无埋点
+  // 初始化原始值
+  initOriginalValue = () => {
+    this.setAppEffectCbs();
+    this.setPageEffectCbs();
+    this.originalApp = niceTry(() => App || global.App);
+    this.originalPage = niceTry(() => Page || global.Page);
+    this.originalComponent = niceTry(() => Component || global.Component);
+    this.originalBehavior = niceTry(() => Behavior || global.Behavior);
+  };
+
+  // 初始化事件钩子
   initEventHooks = () => {
     const self = this;
     const { platformConfig, gioPlatform } = this.growingIO;
+    this.initOriginalValue();
     if (platformConfig.canHook) {
       this.nativeGrowing();
-      getGlobal().GioApp = niceTry(() => App ?? window.GioApp);
-      getGlobal().GioPage = niceTry(() => Page ?? window.GioPage);
+      getGlobal().GioApp = niceTry(() => App ?? this.originalApp);
+      getGlobal().GioPage = niceTry(() => Page ?? this.originalPage);
       getGlobal().GioComponent = niceTry(
-        () => Component ?? window.GioComponent
+        () => Component ?? this.originalComponent
       );
-      getGlobal().GioBehavior = niceTry(() => Behavior);
+      getGlobal().GioBehavior = niceTry(
+        () => Behavior ?? this.originalBehavior
+      );
     } else if (gioPlatform === 'quickapp') {
-      window.GioApp = function (...args) {
+      getGlobal().GioApp = function (...args) {
         return self.appOverriding(args[0]);
       };
-      window.GioPage = function (...args) {
+      getGlobal().GioPage = function (...args) {
         return self.pageOverriding(args[0]);
       };
-      window.GioComponent = function (...args) {
+      getGlobal().GioComponent = function (...args) {
         return self.pageOverriding(args[0]);
       };
     }

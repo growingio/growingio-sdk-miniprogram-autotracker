@@ -6,10 +6,8 @@ import EMIT_MSG from '@@/constants/emitMsg';
 class PageEffects {
   public buildTabClickEvent: (tabItem: any) => void;
   private prevEvent: any;
-  private argQuery: any;
   constructor(public growingIO: GrowingIOType) {
     this.prevEvent = {};
-    this.argQuery = {};
   }
 
   main = (page: any, event: PageHookLifeCircle, args: any) => {
@@ -22,15 +20,15 @@ class PageEffects {
       platformConfig,
       dataStore: {
         getTrackerVds,
+        getOriginalSource,
+        setOriginalSource,
         trackersExecute,
-        shareOut,
         eventHooks,
         toggleShareOut,
         buildAppMessageEvent,
         buildTimelineEvent,
         buildAddFavorites
-      },
-      inPlugin
+      }
     }: GrowingIOType = this.growingIO;
     const { currentPage } = eventHooks;
     if (
@@ -68,43 +66,34 @@ class PageEffects {
     currentPage.currentLifecycle = event;
     switch (event) {
       case pageListeners.pageLoad: {
-        this.argQuery[path] =
+        // 获取一次页面参数存起来，防止类似支付宝小程序只能通过生命周期获取页面参数或页面堆栈拿不到页面参数，做兜底
+        currentPage.queryOption[path] =
           get(page, 'options') ||
           get(page, '__displayReporter.query') ||
           get(page, '$page.query') ||
           get(page, '$wx.__displayReporter.query') ||
+          get(page, '$taroParams') ||
           args[0] ||
           {};
-        unset(this.argQuery[path], '$taroTimestamp');
-        currentPage.parsePage(page, this.argQuery[path]);
+        unset(currentPage.queryOption[path], '$taroTimestamp');
         break;
       }
       case pageListeners.pageShow: {
-        if (inPlugin) {
-          currentPage.parsePage(page, this.argQuery[path]);
-          if (!currentPage.path) {
-            // 插件中没有页面时直接将插件appId作为页面信息
-            currentPage.path = `/插件${vdsConfig.appId}}`;
-            currentPage.title = `/插件${vdsConfig.appId}}`;
+        trackersExecute((trackingId: string) => {
+          // 检查originalSource内容是否已经被消费，如果没有被消费是同一个页面，说明visit还没被发出去，要更新title
+          const originalSource = getOriginalSource(trackingId);
+          if (!isEmpty(originalSource) && originalSource.path === path) {
+            setOriginalSource(trackingId, {
+              ...originalSource,
+              title: currentPage.getPageTitle()
+            });
           }
-          trackersExecute((trackingId: string) => {
-            const { trackPage } = getTrackerVds(trackingId);
-            if (trackPage) {
-              this.buildPageEvent(trackingId);
-            }
-          });
-        } else if (!shareOut || !eventHooks.currentPage.time) {
-          // 不是因为分享切出再返回的onshow（视为第一次进入改页面）和切出去以后因为超时或者进入的场景值不一致时（会在appshow清掉页面时间），发page
-          currentPage.parsePage(page, this.argQuery[path]);
-          // 超时进入页面时前后path一致parsePage方法不会重置页面时间，可能会没有值，所以要补充重设一次
-          eventHooks.currentPage.time = Date.now();
-          trackersExecute((trackingId: string) => {
-            const { trackPage } = getTrackerVds(trackingId);
-            if (trackPage) {
-              this.buildPageEvent(trackingId);
-            }
-          });
-        }
+          // 发page事件
+          const { trackPage } = getTrackerVds(trackingId);
+          if (trackPage) {
+            this.buildPageEvent(trackingId);
+          }
+        });
         // 分享标记置为false
         toggleShareOut(false);
         break;
@@ -165,18 +154,12 @@ class PageEffects {
         eventContextBuilder,
         eventInterceptor,
         eventHooks: { currentPage }
-      },
-      minipInstance
+      }
     } = this.growingIO;
     const event = {
       eventType: 'PAGE',
       referralPage: currentPage.getReferralPage(trackingId),
-      ...eventContextBuilder(trackingId),
-      // page事件要单独设一个title以覆盖eventContextBuilder中的lastPage的title错误值
-      title:
-        currentPage?.title ||
-        minipInstance.getPageTitle(minipInstance.getCurrentPage()),
-      timestamp: currentPage.time
+      ...eventContextBuilder(trackingId)
     };
     // 合并页面属性
     event.attributes = currentPage.eventSetPageProps(trackingId, event);

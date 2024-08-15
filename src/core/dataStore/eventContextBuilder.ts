@@ -26,8 +26,6 @@ class EventContextBuilder {
       dataStore: {
         scene,
         eventHooks: { currentPage },
-        lastVisitEvent,
-        lastPageEvent,
         generalProps
       }
     } = this.growingIO;
@@ -36,6 +34,7 @@ class EventContextBuilder {
     const locationData = dataStore.locationData[trackingId];
     const { systemInfo = {}, network = {} } = minipInstance;
     const { brand, model, platform, language } = systemInfo;
+    const pagePath = currentPage.getPagePath();
     // 事件主要内容组装
     const context: any = {
       appChannel: `scn:${scene || 'NA'}`,
@@ -51,20 +50,17 @@ class EventContextBuilder {
       longitude: locationData?.longitude,
       networkState: network?.networkType || network?.type || network?.subtype,
       operatingSystem: getOS(platform, platformConfig.name),
-      path: currentPage?.path ? currentPage?.path : lastVisitEvent.path, // 如果页面中的path取不到，说明页面没初始化，还在app的生命周期中（appOnLoad/appOnShow），需要拿visit的path补上
+      path: pagePath, // 如果页面中的path取不到，说明页面没初始化
       platform: platformConfig.platform,
       platformVersion:
         platformConfig.name +
         (systemInfo.version ? ` ${systemInfo.version}` : ''),
-      query: currentPage?.path ? currentPage?.query : lastVisitEvent.query, // 如果页面中的path取不到，说明页面没初始化，还在app的生命周期中（appOnLoad/appOnShow），需要拿visit的query补上
+      query: pagePath ? currentPage.getPageQeury() : '', // 如果页面中的path取不到，说明页面没初始化
       screenHeight: getScreenHeight(systemInfo),
       screenWidth: getScreenWidth(systemInfo),
       sdkVersion,
       sessionId: userStore.getSessionId(trackingId),
-      title:
-        lastPageEvent[trackingId]?.title || // 除visit,page事件外，其他事件都用lastpage中的title以保持一致
-        currentPage?.title ||
-        minipInstance.getPageTitle(minipInstance.getCurrentPage()),
+      title: currentPage.getPageTitle(),
       timestamp: Date.now(),
       timezoneOffset: new Date().getTimezoneOffset(),
       userId: userStore.getUserId(trackingId)

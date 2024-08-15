@@ -76,16 +76,15 @@ export interface PageShareResult {
 }
 
 export interface MinipPageType {
-  path: string;
-  time: number;
-  query: any;
+  queryOption: any;
   settedTitle: any;
-  title: string;
   pageProps: any;
   lastLifecycle: string;
   currentLifecycle: string;
-  parsePage: (page: any, query: any) => void;
-  getQuery: (query: any) => string;
+  getPagePath: () => string;
+  getPageQeury: () => string;
+  getPageTitle: (trackingId?: string) => string;
+  qsQuery: (query: any) => string;
   getReferralPage: (trackingId: string) => string;
   buildShareQuery: (result: PageShareResult) => [string, string];
   updateAppMessageResult: (result: PageShareResult) => PageShareResult;
@@ -110,8 +109,7 @@ export interface EventHooksType {
   supLifeFcs: (target: any, type: 'app' | 'page') => void;
   // 对象的遍历
   objectTraverse: (target: any, fn: any) => any;
-  // 初始化无埋点
-  initEventHooks: () => void;
+
   // 生命周期方法effects
   lifeFcEffects: (eventName: string, method: any, cType: 'App' | 'Page') => any;
   // 自定义方法effects
@@ -140,4 +138,8 @@ export interface EventHooksType {
   growingBehavior: (behavior: any) => any;
   // 对原生的重写方法
   nativeGrowing: (designated?: string[]) => void;
+  // 初始化原始值
+  initOriginalValue: () => void;
+  // 初始化事件钩子
+  initEventHooks: () => void;
 }

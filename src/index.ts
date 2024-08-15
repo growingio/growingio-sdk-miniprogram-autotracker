@@ -62,16 +62,16 @@ const gdp = function () {
 getGlobal().gdp = gdp;
 getGlobal().gioSDKVersion = gioInstance.sdkVersion;
 
-export const GioApp = niceTry(
-  () => gioInstance.dataStore.eventHooks.growingApp ?? App
-);
-export const GioPage = niceTry(
-  () => gioInstance.dataStore.eventHooks.growingPage ?? Page
-);
-export const GioComponent = niceTry(
-  () => gioInstance.dataStore.eventHooks.growingComponent ?? Component
-);
-export const GioBehavior = niceTry(
-  () => gioInstance.dataStore.eventHooks.growingBehavior ?? Behavior
-);
+const {
+  growingApp,
+  growingPage,
+  growingComponent,
+  growingBehavior,
+  initOriginalValue
+} = gioInstance.dataStore.eventHooks;
+initOriginalValue();
+export const GioApp = niceTry(() => growingApp ?? App);
+export const GioPage = niceTry(() => growingPage ?? Page);
+export const GioComponent = niceTry(() => growingComponent ?? Component);
+export const GioBehavior = niceTry(() => growingBehavior ?? Behavior);
 export default gdp;

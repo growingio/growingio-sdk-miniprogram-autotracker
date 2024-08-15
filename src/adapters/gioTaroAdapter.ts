@@ -32,11 +32,13 @@ class GioTaroAdapter {
   private taroVue: any;
   private taroVueVersion: number;
   private exposedNames: any;
+  private inAppLifecycle: boolean;
   constructor(public growingIO: GrowingIOType) {
     this.pluginVersion = '__PLUGIN_VERSION__';
     const { utils, emitter, minipInstance } = this.growingIO;
     ut = utils;
     this.exposedNames = {};
+    this.inAppLifecycle = true;
     emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event }) => {
       if (['Page onShow', 'Page onReady'].includes(event)) {
         if (this.taro && this.taroVersion === '3') {
@@ -155,7 +157,6 @@ class GioTaroAdapter {
     if (originCall) {
       self.defineProperty(self.taro.hooks, 'call', function (...args) {
         const argsArray = Array.from(args);
-        let result = originCall.apply(this, argsArray);
         // 根据taro消息直接触发页面生命周期
         if (argsArray[0] === 'getLifecycle') {
           const lifetime = argsArray[2];
@@ -163,15 +164,20 @@ class GioTaroAdapter {
             eventHooks.pageHandlers.includes(lifetime) &&
             !CUSTOM_HOOK_EVENTS.includes(lifetime)
           ) {
-            ut.niceTry(() =>
-              eventHooks.pageEffects.main(
-                minipInstance.getCurrentPage(),
-                lifetime,
-                argsArray[1]
-              )
-            );
+            // hook方法也会执行第一次进入小程序时的AppOnShow导致先出发第一个页面onShow的bug。这里用一个变量标记当前的生命周期是否在App中
+            if (lifetime === 'onLoad' && self.inAppLifecycle) {
+              self.inAppLifecycle = false;
+            }
+            // 有路由地址的才是页面的生命周期（支付宝在ApponShow时也会拿到，所以要再判标记）
+            const page = minipInstance.getCurrentPage();
+            if (page.route && !self.inAppLifecycle) {
+              ut.niceTry(() =>
+                eventHooks.pageEffects.main(page, lifetime, argsArray[1])
+              );
+            }
           }
         }
+        let result = originCall.apply(this, argsArray);
         // 分享和添加收藏事件走hook逻辑
         if (argsArray[0] === 'modifyPageObject') {
           const pageObject = argsArray[1];
@@ -361,7 +367,7 @@ class GioTaroAdapter {
         if (taroElement?._root?.uid) {
           path = ut.head(ut.split(taroElement._root.uid, '?'));
         } else {
-          path = this.growingIO.dataStore.eventHooks.currentPage.path;
+          path = this.growingIO.dataStore.eventHooks.currentPage.getPagePath();
         }
         if (this.exposedNames[path]) {
           funcName =
@@ -381,7 +387,7 @@ class GioTaroAdapter {
 
   // 无法获取的方法名
   getAnonymousFunc = (taroElement: any) => {
-    const { path } = this.growingIO.dataStore.eventHooks.currentPage;
+    const path = this.growingIO.dataStore.eventHooks.currentPage.getPagePath();
     const paths = path.split('/');
     const idx = paths.findIndex((v) => v.indexOf('page') > -1) + 1;
     const pageName = idx && paths[idx] ? paths[idx] : ut.last(paths);

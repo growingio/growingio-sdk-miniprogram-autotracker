@@ -1,18 +1,11 @@
 import { AppHookLifeCircle } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
-import {
-  isEmpty,
-  isObject,
-  typeOf,
-  keys,
-  forEach,
-  has,
-  isNil
-} from '@@/utils/glodash';
-import { qsStringify } from '@@/utils/tools';
+import { isEmpty, typeOf } from '@@/utils/glodash';
+import { getLaunchQuery, qsStringify } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
 
 class AppEffects {
+  public enterParams: any = {};
   constructor(public growingIO: GrowingIOType) {}
 
   main = (event: AppHookLifeCircle, args: any) => {
@@ -28,7 +21,6 @@ class AppEffects {
         trackersExecute,
         shareOut,
         lastCloseTime,
-        eventHooks,
         saveStorageInfo,
         setOriginalSource
       }
@@ -48,25 +40,35 @@ class AppEffects {
       params: args[0] ?? {}
     });
     switch (event) {
+      case appListeners.appLaunch:
+        // 在launch先获取一次是防止在此生命周期中发埋点或调用其他api时获取不到path和query
+        this.enterParams = { ...args[0] };
+        break;
       // 快应用是执行onCreate
       case appListeners.appCreate:
       // 各小程序执行onShow
       case appListeners.appShow: {
         // 获取进入小程序的path、query和scene
-        const { path, query } = this.enterParamsParse(args[0]);
+        const { path, query, referralPage } = this.enterParamsParse(args[0]);
         if (!shareOut && vdsConfig.originalSource) {
-          // 保存初始来源信息
-          trackersExecute((trackingId: string) => {
-            setOriginalSource(trackingId, { path, query });
-          });
+          // 个别（说的就是你：淘宝）小程序场景值不一样后台拉起时可能args中会没有path和query
+          if (path) {
+            // 保存初始来源信息
+            trackersExecute((trackingId: string) => {
+              setOriginalSource(trackingId, { path, query, referralPage });
+            });
+          }
         }
         // 以下条件均会被认为是一次新的访问
         // 没有关闭时间说明是新访问
         if (!lastCloseTime) {
-          // 保存进入小程序的参数
-          dataStore.lastVisitEvent = { path, query };
           trackersExecute((trackingId: string) => {
-            this.buildVisitEvent(trackingId, { path, query });
+            dataStore.lastVisitEvent[trackingId] = {
+              path,
+              query,
+              referralPage
+            };
+            this.buildVisitEvent(trackingId, { path, query, referralPage });
           });
         } else if (
           // 两次打开间隔时间超过keepAlive设定(默认5分钟)
@@ -78,10 +80,17 @@ class AppEffects {
           trackersExecute((trackingId: string) => {
             userStore.setSessionId(trackingId);
           });
-          // 需要按自然逻辑发visit时，清掉pagetime，防止取值错误（会在page中重新生成）
-          eventHooks.currentPage.time = undefined;
           trackersExecute((trackingId: string) => {
-            this.buildVisitEvent(trackingId, { path, query });
+            if (!path) {
+              // 个别（说的就是你：淘宝）小程序场景值不一样后台拉起时可能args中会没有path和query，直接取上一个最后发送的page中的值
+              const lastPage = dataStore.lastPageEvent[trackingId];
+              this.buildVisitEvent(trackingId, {
+                path: lastPage.path,
+                query: lastPage.query
+              });
+            } else {
+              this.buildVisitEvent(trackingId, { path, query });
+            }
           });
         }
         break;
@@ -108,16 +117,11 @@ class AppEffects {
   };
 
   // 进入小程序时的相关数据处理
-  enterParamsParse = (args: any) => {
+  enterParamsParse = (args: any = {}) => {
     const { gioPlatform, minipInstance, dataStore } = this.growingIO;
-    let vPath = ''; // 进入小程序时的path
-    let vQuery = ''; // 进入小程序时的参数（启动参数）
-    const assignment = (p: string, q = {}) => {
-      vPath = p;
-      vQuery = keys(q)
-        .map((k) => `${k}=${q[k]}`)
-        .join('&');
-    };
+    let rPath = ''; // 进入小程序时的path
+    let rQuery = ''; // 进入小程序时的参数（启动参数）
+    let rAppId = ''; // scene=1037或1038时来源小程序、公众号或 App 的 appId
     // 支持getEnterOptionsSync
     if (
       gioPlatform !== 'quickapp' &&
@@ -125,35 +129,25 @@ class AppEffects {
     ) {
       const { path, query, scene, referrerInfo } =
         minipInstance.minip.getEnterOptionsSync() || {};
-      const originQuery = args.query || query;
-      assignment(args.path || path, originQuery);
-      dataStore.scene = args.scene || scene;
-      // extraData字段计入query
-      if (!isEmpty(referrerInfo) && isObject(referrerInfo?.extraData)) {
-        let extraQuery = [];
-        forEach(referrerInfo.extraData, (v, k) => {
-          if (
-            // 与原始query中的key冲突时，以原始query为准
-            !has(originQuery, k) &&
-            // 只处理字符串、数字和布尔类型的值
-            ['string', 'number', 'boolean'].includes(typeOf(v))
-          ) {
-            extraQuery.push(`${k}=${v}`);
-          }
-        });
-        const extraQueryString = extraQuery.join('&');
-        vQuery =
-          vQuery && extraQueryString
-            ? `${vQuery}&${extraQueryString}`
-            : vQuery || extraQueryString;
+      rPath = path || args.path;
+      rQuery = query || args.query;
+      rAppId = referrerInfo?.appId || args?.referrerInfo?.appId || '';
+      dataStore.scene = scene || args.scene;
+      // 来源有额外参数时并入页面参数
+      if (!isEmpty(referrerInfo?.extraData)) {
+        rQuery = qsStringify(getLaunchQuery(rQuery, referrerInfo.extraData));
+      } else {
+        rQuery = qsStringify(rQuery);
       }
     } else {
       // 不支持的按老逻辑兜底
-      const { path, query } = args;
-      assignment(path, query);
+      const { path, query, referrerInfo } = args;
+      rPath = path;
+      rQuery = qsStringify(query);
+      rAppId = referrerInfo?.appId || '';
       this.parseScene(args);
     }
-    return { path: vPath, query: vQuery };
+    return { path: rPath, query: rQuery, referralPage: rAppId };
   };
 
   // 获取来源场景值
@@ -188,13 +182,7 @@ class AppEffects {
   // 构建访问事件
   buildVisitEvent = (trackingId: string, props?: any) => {
     const {
-      dataStore: {
-        getOriginalSource,
-        eventContextBuilder,
-        eventInterceptor,
-        eventHooks
-      },
-      minipInstance,
+      dataStore: { getOriginalSource, eventContextBuilder, eventInterceptor },
       vdsConfig
     } = this.growingIO;
     const originalSource = getOriginalSource(trackingId);
@@ -202,22 +190,20 @@ class AppEffects {
     const query = props?.query || '';
     let event = {
       eventType: 'VISIT',
-      ...eventContextBuilder(trackingId, {
-        // params.path是生命周期值或者是已有的值
-        path: props?.path || '',
-        // params.query是对象说明是生命周期调用，否则是补发调用
-        query: typeOf(query) === 'string' ? query : qsStringify(query),
-        // visit事件要单独设一次title以覆盖eventContextBuilder中的lastPage的可能的title错误值
-        title:
-          eventHooks.currentPage?.title ||
-          minipInstance.getPageTitle(minipInstance.getCurrentPage()),
-        timestamp: eventHooks.currentPage.time
-          ? eventHooks.currentPage.time - 1
-          : +Date.now()
-      })
+      ...eventContextBuilder(trackingId, {})
     };
+    if (!isEmpty(props) && props.path) {
+      // params.path是生命周期值或者是已有的值
+      event.path = props.path || '';
+      // params.query是对象说明是生命周期调用，否则是补发调用
+      event.query = typeOf(query) === 'string' ? query : qsStringify(query);
+      // 如果有来源
+      if (props.referralPage) {
+        event.referralPage = props.referralPage;
+      }
+    }
     // 配置使用初始来源时，visit使用初始来源数据
-    if (vdsConfig.originalSource && !isNil(originalSource)) {
+    if (vdsConfig.originalSource && !isEmpty(originalSource)) {
       event = { ...event, ...originalSource };
     }
     eventInterceptor(event);

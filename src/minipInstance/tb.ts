@@ -48,6 +48,11 @@ class Taobao extends BaseImplements {
   setStorageSync = (key: string, value: any) => {
     this.minip?.setStorageSync({ key, data: value });
   };
+
+  // 同步移除指定数据
+  removeStorageSync = (key: string) => {
+    this.minip?.removeStorageSync({ key });
+  };
 }
 
 export default Taobao;

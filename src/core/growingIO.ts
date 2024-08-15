@@ -208,22 +208,21 @@ class GrowingIO implements GrowingIOType {
   setPageAttributes = (trackingId: string, properties: any) => {
     if (isObject(properties) && !isEmpty(properties)) {
       const { currentPage } = this.dataStore.eventHooks;
+      const path = currentPage.getPagePath();
       if (isEmpty(currentPage.pageProps[trackingId])) {
         currentPage.pageProps[trackingId] = {};
       }
-      if (isEmpty(currentPage.pageProps[trackingId][currentPage.path])) {
-        currentPage.pageProps[trackingId][currentPage.path] = {};
+      if (isEmpty(currentPage.pageProps[trackingId][path])) {
+        currentPage.pageProps[trackingId][path] = {};
       }
       // 结果合并，动态属性不作处理
       if (!isEmpty(properties)) {
         forEach(properties, (v, k) => {
           if (
-            !isFunction(
-              currentPage.pageProps[trackingId][currentPage.path][k]
-            ) ||
+            !isFunction(currentPage.pageProps[trackingId][path][k]) ||
             isFunction(v)
           ) {
-            currentPage.pageProps[trackingId][currentPage.path][k] = v;
+            currentPage.pageProps[trackingId][path][k] = v;
           }
         });
       }
@@ -244,15 +243,13 @@ class GrowingIO implements GrowingIOType {
         !isEmpty(this.dataStore.eventHooks.currentPage.pageProps[trackingId])
       ) {
         const { currentPage } = this.dataStore.eventHooks;
+        const path = currentPage.getPagePath();
         if (isArray(properties) && !isEmpty(properties)) {
           properties.forEach((propName: string) => {
-            unset(
-              currentPage.pageProps[trackingId][currentPage.path],
-              propName
-            );
+            unset(currentPage.pageProps[trackingId][path], propName);
           });
         } else {
-          currentPage.pageProps[trackingId][currentPage.path] = {};
+          currentPage.pageProps[trackingId][path] = {};
         }
       }
     } catch (error) {
@@ -319,9 +316,9 @@ class GrowingIO implements GrowingIOType {
       // 该方法很可能被放在在app的onShow中的wx.login异步回调中，
       // 此时页面的path和query可能还没取到，就拿visit事件的path和query补上
       if (!event.path) {
-        event.path = lastVisitEvent.path;
-        event.query = lastVisitEvent.query;
-        event.title = lastVisitEvent.title;
+        event.path = lastVisitEvent[trackingId]?.path;
+        event.query = lastVisitEvent[trackingId]?.query;
+        event.title = lastVisitEvent[trackingId]?.title;
       }
       eventInterceptor(event);
     } else {
@@ -348,14 +345,7 @@ class GrowingIO implements GrowingIOType {
       // 切换userId时重置session并补发visit
       if (prevId && prevId !== userId) {
         this.userStore.setSessionId(trackingId);
-        const { path, query, settedTitle } =
-          this.dataStore.eventHooks.currentPage;
-        // 重新获取页面title，防止切换配置前修改了title没取到
-        this.dataStore.eventHooks.currentPage.title =
-          settedTitle[path] ||
-          this.minipInstance.getPageTitle(this.minipInstance.getCurrentPage());
-        // visit取当前页面值
-        this.dataStore.sendVisit(trackingId, { path, query });
+        this.dataStore.sendVisit(trackingId);
       }
     } else {
       callError('setUserId');
@@ -611,7 +601,9 @@ class GrowingIO implements GrowingIOType {
     if (!isEmpty(extraParams)) {
       extraParams.forEach((o) => {
         if (!ignoreFields.includes(o)) {
-          infos[`gio${o}`] = this.dataStore.lastVisitEvent[o];
+          infos[`gio${o}`] = (this.dataStore.lastVisitEvent[trackingId] ?? {})[
+            o
+          ];
         }
       });
     }

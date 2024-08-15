@@ -83,12 +83,14 @@ class GioTaobaoAdapter {
   // 单条发送无延迟
   singleInvoke = (trackingId: string) => {
     const { vdsConfig, emitter, uploader } = this.growingIO;
-    const hoardingQueue = uploader.getHoardingQueue(trackingId);
-    const requestQueue = uploader.getRequestQueue(trackingId);
+    let hoardingQueue = uploader.getHoardingQueue(trackingId);
+    let requestQueue = uploader.getRequestQueue(trackingId);
     // 过滤掉重试超过3次的请求(直接丢弃)
     uploader.requestQueue[trackingId] = [...requestQueue].filter(
-      (o) => (uploader.retryIds[o.requestId] || 0) < uploader.retryLimit
+      (o) => (uploader.retryIds[o.requestId] ?? 0) <= uploader.retryLimit
     );
+    // 过滤重新赋值后要重新获取
+    requestQueue = uploader.getRequestQueue(trackingId);
     if (ut.isEmpty([...hoardingQueue, ...requestQueue])) {
       return;
     }

@@ -29,7 +29,7 @@ class GioUniAppAdapter {
     const mainVersion = Number(ut.head(ut.split(this.uniVue.version, '.')));
     switch (mainVersion) {
       case 2:
-        this.uniVue2Proxy(this.uniVue);
+        this.growingIO.dataStore.eventHooks.nativeGrowing();
         break;
       case 3:
         this.uniVue3Proxy(this.uniVue);
@@ -72,37 +72,6 @@ class GioUniAppAdapter {
     } else {
       return eventName;
     }
-  };
-
-  // vue2代理
-  uniVue2Proxy = (vue: any) => {
-    const {
-      dataStore: { eventHooks },
-      minipInstance
-    } = this.growingIO;
-    eventHooks.nativeGrowing(['App', 'Component', 'Behavior']);
-    /**
-     * 注意：在字节小程序中，uniapp的表现会不一致，beforeMount会晚于小程序onShow执行；
-     * 页面中如果没有onShow方法的定义，会无法触发SDK的onShow进而没有Page事件，让客户在页面中补一个空的onShow即可。
-     */
-    vue.mixin({
-      beforeMount() {
-        if (this.mpType === 'page') {
-          eventHooks.pageOverriding(this.$scope);
-          // 需要单独处理getPageTitle，防止在vue中onShow里拿的是错误的
-          const self = this;
-          const originGetter = minipInstance.getPageTitle;
-          minipInstance.getPageTitle = function (...args) {
-            const cPath = self.$scope.route;
-            const vmTitle =
-              cPath === eventHooks.currentPage.path
-                ? self.$scope?.$vm?._data?.gioPageTitle
-                : undefined;
-            return vmTitle ? vmTitle : originGetter.apply(this, args);
-          };
-        }
-      }
-    });
   };
 
   // vue3代理

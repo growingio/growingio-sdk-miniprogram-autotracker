@@ -16,7 +16,7 @@ const processENV = process.argv[process.argv.length - 1]
   .split('-')
   .filter((o) => o);
 // 获取是否打包全量插件
-const folder = processENV[0] ?? 'plugins';
+const folder = processENV[0] || 'plugins';
 
 // 获取外置插件的目录
 const plugInFolder = fs

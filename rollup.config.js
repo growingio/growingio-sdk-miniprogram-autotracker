@@ -43,7 +43,7 @@ console.log(
 
 const fileName = () => {
   let n = 'dist/';
-  n += PLATFORMS[platform] ?? frameName;
+  n += (PLATFORMS[platform] || frameName);
   n += '.js';
   return n;
 };

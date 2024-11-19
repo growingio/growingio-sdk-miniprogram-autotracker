@@ -29,6 +29,8 @@ export interface UserOptions {
   forceLogin: boolean;
   // 或略上报字段
   ignoreFields: string[];
+  // 曝光比例
+  impressionScale: number;
   // 是否使用原始来源信息作为访问事件的参数上报
   originalSource: boolean;
   // session保活时长（5分钟）
@@ -39,6 +41,8 @@ export interface UserOptions {
   requestTimeout?: number;
   // 数据上报域名
   serverUrl?: string;
+  // session超时时长
+  sessionExpires?: number;
   // taro框架实例
   taro?: any;
   // taro框架vue实例

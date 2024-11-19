@@ -19,16 +19,20 @@ export const DEFAULT_SETTINGS = {
   forceLogin: { type: 'boolean', default: false },
   // 或略上报字段
   ignoreFields: { type: 'array', default: [] },
+  // 曝光比例
+  impressionScale: { type: 'number', default: 0 },
   // 是否开启强制插件模式
   pluginMode: { type: 'boolean', default: false },
   // 是否使用原始来源信息作为访问事件的参数上报
   originalSource: { type: 'boolean', default: true },
   // session保活时长（5分钟）
-  keepAlive: { type: 'number', default: 300000 },
+  keepAlive: { type: 'number', default: 5 },
   // 性能采集配置
   performance: { type: 'object', default: { monitor: true, exception: true } },
   // 数据上报域名
   serverUrl: { type: 'string', default: 'https://napi.growingio.com' },
+  // 会话有效时长
+  sessionExpires: { type: 'number', default: -1 },
   // 请求超时时长
   requestTimeout: { type: 'number', default: 5000 },
   // taro框架实例

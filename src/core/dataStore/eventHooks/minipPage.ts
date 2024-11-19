@@ -25,17 +25,19 @@ class MinipPage implements MinipPageType {
   // 根据页面存储的页面参数
   public queryOption: any;
   // 通过调用wx.setNavigationBarTitle设置的title
-  public settedTitle: any;
+  public configuredTitle: any;
   // 页面级属性
   public pageProps: any;
   // 上一个执行的小程序生命周期
   public lastLifecycle: string;
   // 当前执行的小程序生命周期
   public currentLifecycle: string;
+  // 当前生命周期是否在页面显示前
+  public lifeBeforeShow = true;
 
   constructor(public growingIO: GrowingIOType) {
     this.queryOption = {};
-    this.settedTitle = {};
+    this.configuredTitle = {};
     this.pageProps = {};
   }
 
@@ -60,7 +62,7 @@ class MinipPage implements MinipPageType {
   };
 
   // 获取页面参数
-  getPageQeury = () => {
+  getPageQuery = () => {
     const { minipInstance, dataStore, trackingId } = this.growingIO;
     const stackPage = minipInstance.getCurrentPage();
     const stackPath = minipInstance.getCurrentPath();
@@ -105,7 +107,7 @@ class MinipPage implements MinipPageType {
     const { minipInstance, inPlugin, dataStore } = this.growingIO;
     const path = minipInstance.getCurrentPath();
     const title =
-      this.settedTitle[path] ||
+      this.configuredTitle[path] ||
       minipInstance.getPageTitle(minipInstance.getCurrentPage());
     if (inPlugin) {
       const vds = dataStore.getTrackerVds(
@@ -122,9 +124,9 @@ class MinipPage implements MinipPageType {
 
   // 格式化页面参数
   qsQuery = (query = {}) => {
-    const filtQeury = { ...query };
-    unset(filtQeury, 'wxShoppingListScene');
-    return qsStringify(filtQeury);
+    const slimQuery = { ...query };
+    unset(slimQuery, 'wxShoppingListScene');
+    return qsStringify(slimQuery);
   };
 
   // 获取页面来源
@@ -148,21 +150,21 @@ class MinipPage implements MinipPageType {
     const customSplit = splitPath(result.path ?? '');
 
     let path = this.getPagePath();
-    let parsedQeury: any = {};
+    let parsedQuery: any = {};
     let resultHasPath = has(result, 'path');
     // 优先使用自定义的地址
     if (resultHasPath) {
       path = head(customSplit);
-      parsedQeury = qsParse(last(customSplit)) || {};
+      parsedQuery = qsParse(last(customSplit)) || {};
     }
 
     // 自定义path中没有截取到query说明是在onShareAppMessage中没有参数，或是在onShareTimeline中需要取自定义query
-    if (isEmpty(parsedQeury)) {
-      parsedQeury = qsParse(result.query ?? '') || {};
-      compact(keys(parsedQeury)).forEach((key) => {
-        // 删除从默认页面的query中原有的utm参数，防止带入到下一次分享导致渠道统计错误（如果客户质疑参数被删，让他们自己拼回去或者关followshare）
+    if (isEmpty(parsedQuery)) {
+      parsedQuery = qsParse(result.query ?? '') || {};
+      compact(keys(parsedQuery)).forEach((key) => {
+        // 删除从默认页面的query中原有的utm参数，防止带入到下一次分享导致渠道统计错误（如果客户质疑参数被删，让他们自己拼回去或者关followShare）
         if (key.toLowerCase().startsWith('utm_')) {
-          unset(parsedQeury, key);
+          unset(parsedQuery, key);
         }
       });
     }
@@ -171,13 +173,13 @@ class MinipPage implements MinipPageType {
 
     // 自定义query没有值则使用当前页面默认参数
     // 如果path存在，但是不携带参数，此时不使用当前页面的默认参数
-    if (!resultHasPath && isEmpty(parsedQeury)) {
+    if (!resultHasPath && isEmpty(parsedQuery)) {
       const stackPage = this.growingIO.minipInstance.getCurrentPage();
-      parsedQeury =
+      parsedQuery =
         stackPage.options || this.queryOption[stackPage.route] || {};
     }
 
-    return [path, qsStringify(parsedQeury)];
+    return [path, qsStringify(parsedQuery)];
   }
 
   // 更新分享结果

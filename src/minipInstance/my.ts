@@ -20,7 +20,7 @@ class Alipay extends BaseImplements {
             // 这个currentPath一般认为是在onLoad中获取的当前小程序页面的path，此时SDK还没有parse，保存的还是上一个页面的信息
             const currentPath = self.getCurrentPath();
             const { title } = arguments[0] || {};
-            self.growingIO.dataStore.eventHooks.currentPage.settedTitle[
+            self.growingIO.dataStore.eventHooks.currentPage.configuredTitle[
               currentPath
             ] = title;
           }

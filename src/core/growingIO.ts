@@ -163,8 +163,8 @@ class GrowingIO implements GrowingIOType {
   // 需要校验实例的方法执行
   handlerDistribute = (trackingId: string, handler: string, args: any) => {
     const { initializedTrackingIds, getTrackerVds } = this.dataStore;
-    const trakerVds = getTrackerVds(trackingId);
-    if (trakerVds && initializedTrackingIds.includes(trackingId)) {
+    const trackerVds = getTrackerVds(trackingId);
+    if (trackerVds && initializedTrackingIds.includes(trackingId)) {
       return this[handler](trackingId, ...args);
     } else {
       consoleText(`不存在实例：${trackingId}，请检查!`, 'warn');
@@ -342,10 +342,9 @@ class GrowingIO implements GrowingIOType {
       if (idMapping) {
         this.userStore.setUserKey(trackingId, isNil(userKey) ? '' : userKey);
       }
-      // 切换userId时重置session并补发visit
+      // 切换userId时重置session
       if (prevId && prevId !== userId) {
         this.userStore.setSessionId(trackingId);
-        this.dataStore.sendVisit(trackingId);
       }
     } else {
       callError('setUserId');

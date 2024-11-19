@@ -134,6 +134,33 @@ class DataStore implements DataStoreType {
         });
       }
     });
+    // session更新要补发当前页面的visit和page
+    this.growingIO.emitter.on(
+      EMIT_MSG.SESSIONID_UPDATE,
+      ({ oldSessionId, trackingId }) => {
+        if (oldSessionId) {
+          // 补发visit
+          const { getPagePath, getPageQuery: getPageQuery } =
+            this.eventHooks.currentPage;
+          const path = getPagePath();
+          const query = getPageQuery();
+          if (!path) {
+            // 个别（说的就是你：淘宝）小程序场景值不一样后台拉起时可能args中会没有path和query，直接取上一个最后发送的page中的值
+            const lastPage = this.lastPageEvent[trackingId];
+            this.sendVisit(trackingId, {
+              path: lastPage.path,
+              query: lastPage.query
+            });
+          } else {
+            this.sendVisit(trackingId, { path, query });
+          }
+          // 页面显示以后触发切session要补发page，离开页面到页面加载显示完成前的切session不补发，由onshow生命周期触发
+          if (!this.eventHooks.currentPage.lifeBeforeShow) {
+            this.sendPage(trackingId);
+          }
+        }
+      }
+    );
   }
 
   // 获取存储key
@@ -338,6 +365,22 @@ class DataStore implements DataStoreType {
       configs.requestTimeout = 5000;
     }
 
+    // 曝光比例不在合法范围内改回默认值
+    if (configs.impressionScale < 0 || configs.impressionScale > 1) {
+      configs.impressionScale = 0;
+    }
+
+    // keepAlive有效时长不在合法范围内改回默认值
+    if (configs.keepAlive < 0 || configs.keepAlive > 60 * 24) {
+      configs.keepAlive = 5;
+    }
+
+    // session有效时长不在合法范围内改回默认值
+    if (configs.sessionExpires < 1 || configs.sessionExpires > 60 * 24) {
+      // -1为默认不超时切session
+      configs.sessionExpires = -1;
+    }
+
     return {
       ...configs,
       projectId,
@@ -356,20 +399,17 @@ class DataStore implements DataStoreType {
   // 全局配置修改
   setOption = (trackingId: string, k: string, v: any) => {
     const { userStore, emitter } = this.growingIO;
-    const trakerVds = this.getTrackerVds(trackingId);
+    const trackerVds = this.getTrackerVds(trackingId);
     // 检查 k
     const validKey = isString(k) && this.ALLOW_SETTING_KEYS.includes(k);
     const validValue = validKey && typeof v === DEFAULT_SETTINGS[k]?.type;
     if (validKey && validValue) {
-      const prevConfig = { ...trakerVds };
-      this.updateVdsConfig(trackingId, { ...trakerVds, [k]: v });
+      const prevConfig = { ...trackerVds };
+      this.updateVdsConfig(trackingId, { ...trackerVds, [k]: v });
       // 从关闭到打开dataCollect时补发visit和page
       if (k === 'dataCollect' && prevConfig.dataCollect !== v && v) {
         // 更新session
         userStore.setSessionId(trackingId);
-        // 重发visit/page
-        this.sendVisit(trackingId);
-        this.sendPage(trackingId);
       }
       // 配置项有变更要全局广播
       emitter.emit(EMIT_MSG.OPTION_CHANGE, { optionName: k, optionValue: v });
@@ -382,15 +422,15 @@ class DataStore implements DataStoreType {
 
   // 获取全局配置
   getOption = (trackingId: string, k?: string) => {
-    const trakerVds = this.getTrackerVds(trackingId);
+    const trackerVds = this.getTrackerVds(trackingId);
     if (k && has(this.growingIO.vdsConfig, k)) {
-      if (has(trakerVds, k)) {
-        return trakerVds[k];
+      if (has(trackerVds, k)) {
+        return trackerVds[k];
       } else {
         return this.growingIO.vdsConfig[k];
       }
     } else if (isEmpty(k)) {
-      return trakerVds;
+      return trackerVds;
     } else {
       callError(`getOption > ${k}`);
       return undefined;

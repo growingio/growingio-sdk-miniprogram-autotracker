@@ -113,7 +113,7 @@ class GioImpressionTracking {
   };
 
   // 获取到可监听节点后校验节点信息
-  rectobserve = (rect, collectTarget, optionKey) => {
+  rectObserve = (rect, collectTarget, optionKey) => {
     const { gioPlatform } = this.growingIO;
     if (
       (gioPlatform === 'tt' && collectTarget.__nodeId__) ||
@@ -146,7 +146,7 @@ class GioImpressionTracking {
         this.rects[page.route] = {};
       }
       this.rects[page.route][nodeId] = rect;
-      this.creatObserver(collectTarget, optionKey);
+      this.createObserver(collectTarget, optionKey);
     }
   };
 
@@ -166,7 +166,7 @@ class GioImpressionTracking {
         .boundingClientRect(([rect = []]) => {
           rect = ut.isArray(rect) ? rect : [rect];
           if (!isEmpty(rect)) {
-            this.rectobserve(rect, collectTarget, optionKey);
+            this.rectObserve(rect, collectTarget, optionKey);
           }
         });
       query.exec();
@@ -174,20 +174,22 @@ class GioImpressionTracking {
       query.selectAll('.growing_collect_imp').boundingClientRect();
       query.exec(([rect]) => {
         if (!isEmpty(rect)) {
-          this.rectobserve(rect, collectTarget, optionKey);
+          this.rectObserve(rect, collectTarget, optionKey);
         }
       });
     }
   };
 
   // 创建监听
-  creatObserver = (
+  createObserver = (
     collectTarget: any,
     optionKey: 'observeAll' | 'selectAll'
   ) => {
-    const { gioPlatform, minipInstance } = this.growingIO;
+    const { gioPlatform, minipInstance, vdsConfig } = this.growingIO;
     // 初始化监听对象
-    const observerOption = { [optionKey]: true };
+    // 数值要大于0，只能无限趋近于0，等于0的时候会导致没出现就会发曝光
+    const threshold = vdsConfig.impressionScale || 0.0000000000001;
+    const observerOption = { thresholds: [threshold], [optionKey]: true };
     if (
       ['tb', 'my'].includes(gioPlatform) &&
       ut.compareVersion(my.SDKVersion, '2.7.0') >= -1
@@ -221,7 +223,7 @@ class GioImpressionTracking {
         )
       : collectTarget.createIntersectionObserver(observerOption);
     observer = observer.relativeToViewport();
-    // 不管原先是否创建过，直接覆盖（obeserverId会更新）
+    // 不管原先是否创建过，直接覆盖（observerId会更新）
     this.observerIds[page.route][nodeId] = observer;
     // 添加监听回调
     this.targetObserve(observer, page);
@@ -229,10 +231,12 @@ class GioImpressionTracking {
 
   // 给目标节点添加监听回调
   targetObserve = (observerTarget: any, collectPage: any) => {
-    const { taro } = this.growingIO.vdsConfig;
+    const { taro, impressionScale } = this.growingIO.vdsConfig;
+    // 数值要大于0，只能无限趋近于0，等于0的时候会导致没出现就会发曝光
+    const threshold = impressionScale || 0.0000000000001;
     // 监听节点变化
     observerTarget.observe('.growing_collect_imp', (result: any) => {
-      if (!ut.isEmpty(result) && result.intersectionRatio > 0) {
+      if (!ut.isEmpty(result) && result.intersectionRatio >= threshold) {
         let dataset: any = result.dataset;
         if (taro && ut.isTaro3(taro)) {
           dataset = this.getTaro3Dataset(collectPage.route, result.id);

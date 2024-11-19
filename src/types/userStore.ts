@@ -7,6 +7,8 @@ export interface UserStoreType {
   getSessionId: (trackingId: string) => string;
   // 设置sessionId
   setSessionId: (trackingId: string, id?: string) => void;
+  // session超时时刻
+  _sessionExpires: number;
   // 获取userId
   getUserId: (trackingId: string) => string;
   // 设置userId

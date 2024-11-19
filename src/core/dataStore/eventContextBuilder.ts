@@ -55,7 +55,7 @@ class EventContextBuilder {
       platformVersion:
         platformConfig.name +
         (systemInfo.version ? ` ${systemInfo.version}` : ''),
-      query: pagePath ? currentPage.getPageQeury() : '', // 如果页面中的path取不到，说明页面没初始化
+      query: pagePath ? currentPage.getPageQuery() : '', // 如果页面中的path取不到，说明页面没初始化
       screenHeight: getScreenHeight(systemInfo),
       screenWidth: getScreenWidth(systemInfo),
       sdkVersion,

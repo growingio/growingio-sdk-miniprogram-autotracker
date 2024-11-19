@@ -145,6 +145,14 @@ class PageEffects {
       default:
         break;
     }
+    currentPage.lastLifecycle = currentPage.currentLifecycle;
+    currentPage.currentLifecycle = `${event}End`;
+    if (['onHideEnd', 'onUnloadEnd'].includes(currentPage.currentLifecycle)) {
+      currentPage.lifeBeforeShow = true;
+    }
+    if (currentPage.currentLifecycle === 'onShowEnd') {
+      currentPage.lifeBeforeShow = false;
+    }
   };
 
   // 构建页面访问事件

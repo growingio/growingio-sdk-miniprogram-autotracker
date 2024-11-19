@@ -77,12 +77,13 @@ export interface PageShareResult {
 
 export interface MinipPageType {
   queryOption: any;
-  settedTitle: any;
+  configuredTitle: any;
   pageProps: any;
   lastLifecycle: string;
   currentLifecycle: string;
+  lifeBeforeShow: boolean;
   getPagePath: () => string;
-  getPageQeury: () => string;
+  getPageQuery: () => string;
   getPageTitle: (trackingId?: string) => string;
   qsQuery: (query: any) => string;
   getReferralPage: (trackingId: string) => string;

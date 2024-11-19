@@ -11,7 +11,8 @@ import {
   isString,
   keys,
   startsWith,
-  toString
+  toString,
+  unset
 } from '@@/utils/glodash';
 import {
   consoleText,
@@ -148,15 +149,15 @@ class GioABTest {
         `${this.getHashKey(trackingId, layerId)}_gdp_abt_sign`
       ) || 0;
     // 没有超时尝试取数据
-    const abtData =
+    const expData =
       minipInstance.getStorageSync(
         `${this.getHashKey(trackingId, layerId)}_gdp_abtd`
       ) || {};
     // 没有有效数据或者接口请求标记超时则从调用分流服务获取数据
     if (!abtSign || abtSign < Date.now()) {
-      this.initiateRequest(trackingId, layerId, abtData, callback);
+      this.initiateRequest(trackingId, layerId, expData, callback);
     } else {
-      niceCallback(callback, abtData);
+      niceCallback(callback, expData);
     }
   };
 
@@ -234,49 +235,58 @@ class GioABTest {
     originData: any,
     callback: any
   ) => {
-    const { layerId, strategyId, experimentId, variables } = responseData;
-    const abtDataKey = `${this.getHashKey(trackingId, layerId)}_gdp_abtd`;
-    const abtData = {
+    const {
+      layerId,
+      strategyId,
+      experimentId,
+      layerName,
+      experimentName,
+      strategyName,
+      variables
+    } = responseData;
+    const expDataKey = `${this.getHashKey(trackingId, layerId)}_gdp_abtd`;
+    // 从接口取回来的用于hash比较的数据对象
+    const comparisonData = {
       layerId: toString(layerId),
       strategyId: toString(strategyId),
       experimentId: toString(experimentId),
       variables
     };
-    const comparisonValue = hashCode(JSON.stringify(abtData));
-    const controlValue = hashCode(JSON.stringify(originData));
+    // 从本地存储中取回来的用于hash比较的数据对象
+    const controlData = { ...originData };
+    unset(controlData, ['layerName', 'strategyName', 'experimentName']);
+    const comparisonValue = hashCode(JSON.stringify(comparisonData));
+    const controlValue = hashCode(JSON.stringify(controlData));
+    // 需要传给下一步和存储的数据对象
+    const expData = {
+      ...comparisonData,
+      layerName,
+      strategyName,
+      experimentName
+    };
+    // 存储实验数据(无需经过hash对比判断直接复写存储，防止只改了名称)
+    this.growingIO.minipInstance.setStorageSync(
+      expDataKey,
+      expData,
+      new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        new Date().getDate() + 1
+      ).getTime()
+    );
     // 本地实验和请求回来的实验直接做整体hash数据对比
     if (comparisonValue !== controlValue) {
-      // 存储实验数据
-      this.growingIO.minipInstance.setStorageSync(
-        abtDataKey,
-        abtData,
-        new Date(
-          new Date().getFullYear(),
-          new Date().getMonth(),
-          new Date().getDate() + 1
-        ).getTime()
-      );
       // 数据不一致重新发命中埋点
       if (strategyId && experimentId) {
-        this.buildExperimentHitEvent(
-          trackingId,
-          toString(layerId),
-          toString(experimentId),
-          toString(strategyId)
-        );
+        this.buildExperimentHitEvent(trackingId, expData);
       }
     }
     // 回调调用
-    niceCallback(callback, abtData);
+    niceCallback(callback, expData);
   };
 
   // 构建实验命中事件
-  buildExperimentHitEvent = (
-    trackingId: string,
-    layerId: string,
-    experimentId: string,
-    strategyId: string
-  ) => {
+  buildExperimentHitEvent = (trackingId: string, expData: any) => {
     const {
       dataStore: { eventContextBuilder, eventConverter }
     } = this.growingIO;
@@ -285,11 +295,22 @@ class GioABTest {
       eventName: '$exp_hit',
       ...eventContextBuilder(trackingId)
     };
+    const {
+      layerId,
+      experimentId,
+      strategyId,
+      layerName,
+      experimentName,
+      strategyName
+    } = expData;
     event.attributes = limitObject({
       ...(event.attributes ?? {}),
       $exp_layer_id: layerId,
       $exp_id: experimentId,
-      $exp_strategy_id: strategyId
+      $exp_strategy_id: strategyId,
+      $exp_layer_name: layerName,
+      $exp_name: experimentName,
+      $exp_strategy_name: strategyName
     });
     eventConverter(event);
   };

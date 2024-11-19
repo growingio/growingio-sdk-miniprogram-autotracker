@@ -72,25 +72,13 @@ class AppEffects {
           });
         } else if (
           // 两次打开间隔时间超过keepAlive设定(默认5分钟)
-          Date.now() - lastCloseTime > vdsConfig.keepAlive ||
+          Date.now() - lastCloseTime > vdsConfig.keepAlive * 60 * 1000 ||
           // 两次打开时的场景值不一样（即从不同的来源进入小程序）
           (dataStore.lastScene && dataStore.scene !== dataStore.lastScene)
         ) {
           // 重置sessionId
           trackersExecute((trackingId: string) => {
             userStore.setSessionId(trackingId);
-          });
-          trackersExecute((trackingId: string) => {
-            if (!path) {
-              // 个别（说的就是你：淘宝）小程序场景值不一样后台拉起时可能args中会没有path和query，直接取上一个最后发送的page中的值
-              const lastPage = dataStore.lastPageEvent[trackingId];
-              this.buildVisitEvent(trackingId, {
-                path: lastPage.path,
-                query: lastPage.query
-              });
-            } else {
-              this.buildVisitEvent(trackingId, { path, query });
-            }
           });
         }
         break;
@@ -193,9 +181,9 @@ class AppEffects {
       ...eventContextBuilder(trackingId, {})
     };
     if (!isEmpty(props) && props.path) {
-      // params.path是生命周期值或者是已有的值
+      // props.path是生命周期值或者是已有的值
       event.path = props.path || '';
-      // params.query是对象说明是生命周期调用，否则是补发调用
+      // props.query是对象说明是生命周期调用，否则是补发调用
       event.query = typeOf(query) === 'string' ? query : qsStringify(query);
       // 如果有来源
       if (props.referralPage) {

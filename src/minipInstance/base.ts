@@ -64,7 +64,7 @@ class BaseInstance implements MinipInstanceType {
             // 这个currentPath一般认为是在onLoad中获取的当前小程序页面的path，此时SDK还没有parse，保存的还是上一个页面的信息
             const currentPath = self.getCurrentPath();
             const { title } = arguments[0] || {};
-            self.growingIO.dataStore.eventHooks.currentPage.settedTitle[
+            self.growingIO.dataStore.eventHooks.currentPage.configuredTitle[
               currentPath
             ] = title;
           }
@@ -148,7 +148,7 @@ class BaseInstance implements MinipInstanceType {
       const { enterParams } = this.growingIO.dataStore.eventHooks.appEffects;
       if (!page.route && !isEmpty(enterParams)) {
         page.route = enterParams.path || '';
-        title = this._getTitleFromTabbar(instConfig, page.route);
+        title = this._getTitleFromTabBar(instConfig, page.route);
       }
       // 第四优先级取页面的navigationBarTitleText
       niceTry(() => {
@@ -169,13 +169,13 @@ class BaseInstance implements MinipInstanceType {
       });
       // 第五优先级取tabBar配置
       if (!title) {
-        title = this._getTitleFromTabbar(instConfig, page.route);
+        title = this._getTitleFromTabBar(instConfig, page.route);
       }
     }
     return limitString(title);
   };
 
-  private _getTitleFromTabbar = (
+  private _getTitleFromTabBar = (
     instConfig: any,
     pageRoute: string
   ): string => {

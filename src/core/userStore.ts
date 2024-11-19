@@ -26,12 +26,15 @@ class UserStore implements UserStoreType {
   public _userKey: StringObject;
   // 最后一次登录用户id（持久性存储）
   public _gioId: StringObject;
+  // 设置了session有效期以后判断用的session失效时间
+  public _sessionExpires: number;
   constructor(public growingIO: GrowingIOType) {
     this._uid = undefined;
     this._sessionId = {};
     this._userId = {};
     this._userKey = {};
     this._gioId = {};
+    this._sessionExpires = -1;
   }
 
   // 获取sessionId存储key
@@ -69,8 +72,25 @@ class UserStore implements UserStoreType {
 
   // 获取sessionId
   getSessionId = (trackingId: string) => {
+    // 设置了session时长，就需要检查session是否过期
+    const {
+      vdsConfig: { sessionExpires },
+      dataStore: { trackersExecute }
+    } = this.growingIO;
+    // 不存在sessionId（即新进）要设一个新的sessionId
     if (!this._sessionId[trackingId]) {
       this.setSessionId(trackingId);
+    }
+    // 设置了session时长且过期
+    if (sessionExpires > -1) {
+      // 只要有一个session超时，所有实例都要重设sessionId
+      if (Date.now() > this._sessionExpires) {
+        trackersExecute((id: string) => {
+          this.setSessionId(id);
+        });
+      }
+      // 每次获取session后要更新过期时间
+      this._sessionExpires = Date.now() + 1000 * 60 * sessionExpires;
     }
     return this._sessionId[trackingId];
   };
@@ -83,9 +103,15 @@ class UserStore implements UserStoreType {
     }
     // 小程序中sessionId只需要在内存中存储就可以，不需要持久化存储
     this._sessionId[trackingId] = id;
+    // 设置了session时长，就需要更新过期时间
+    const { sessionExpires } = this.growingIO.vdsConfig;
+    if (sessionExpires > -1) {
+      this._sessionExpires = Date.now() + 1000 * 60 * sessionExpires;
+    }
     // 广播通知登录sessionId变更
     if (prevId !== id) {
       this.growingIO.emitter.emit(EMIT_MSG.SESSIONID_UPDATE, {
+        trackingId,
         newSessionId: id,
         oldSessionId: prevId
       });

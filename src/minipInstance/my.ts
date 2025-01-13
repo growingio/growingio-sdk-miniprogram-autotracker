@@ -1,4 +1,6 @@
+import { compareVersion } from '@@/utils/tools';
 import { GrowingIOType } from '@@/types/growingIO';
+import { isFunction } from '@@/utils/glodash';
 import BaseImplements from './base';
 
 class Alipay extends BaseImplements {
@@ -52,6 +54,44 @@ class Alipay extends BaseImplements {
   // 同步移除指定数据
   removeStorageSync = (key: string) => {
     this.minip?.removeStorageSync({ key });
+  };
+
+  // 支付宝和mpass单独处理
+  request = ({
+    url,
+    data,
+    header,
+    timeout,
+    method,
+    success,
+    fail,
+    complete
+  }) => {
+    const requestTask = this.minip?.request({
+      url,
+      data,
+      // 支付宝小程序里叫headers
+      headers: header,
+      timeout,
+      method,
+      success,
+      fail,
+      complete
+    });
+    const myVersion = this.minip.SDKVersion;
+    // 支付宝小程序2.0.0版本及以上才超时中断请求
+    // https://github.com/growingio/growingio-sdk-miniprogram-autotracker/issues/3
+    if (compareVersion(myVersion, '2.0.0') >= 0) {
+      // 设置超时中断请求
+      let t = setTimeout(() => {
+        if (requestTask?.abort && isFunction(requestTask?.abort)) {
+          requestTask?.abort();
+        }
+        clearTimeout(t);
+        t = null;
+      }, (timeout || 10000) + 10);
+    }
+    return requestTask;
   };
 }
 

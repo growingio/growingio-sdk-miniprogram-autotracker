@@ -25,6 +25,8 @@ junit.xml
 src/pluginsIn
 src/pluginsOut
 src/extraPlugins
+src/adapters/gioSensorsAdapter.ts
+src/adapters/gioVolcengineAdapter.ts
 
 test
 jest*

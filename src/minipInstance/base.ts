@@ -268,8 +268,6 @@ class BaseInstance implements MinipInstanceType {
       data,
       // 微信小程序和其他小程序里叫header
       header,
-      // 支付宝小程序里叫headers
-      headers: header,
       timeout,
       method,
       success,

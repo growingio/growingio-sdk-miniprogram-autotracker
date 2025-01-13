@@ -1,6 +1,6 @@
 import { GrowingIOType } from '@@/types/growingIO';
 import { isString, last } from '@@/utils/glodash';
-import { limitString } from '@@/utils/tools';
+import { limitString, niceTry } from '@@/utils/tools';
 import { SystemInfo } from '@@/types/minipInstance';
 import app from '@system.app';
 import BaseImplements from './base';
@@ -97,16 +97,22 @@ class QuickApp extends BaseImplements {
    */
   // 获取当前页面栈
   getCurrentPage = () => {
-    if (router?.getPages) {
-      return last(router?.getPages());
-    }
+    niceTry(() => {
+      if (router?.getPages) {
+        return last(router?.getPages()) || {};
+      }
+    });
     return {};
   };
 
   // 获取当前页面路由
   getCurrentPath = () => {
-    const route = router?.getState();
-    return route?.path;
+    niceTry(() => {
+      if (router?.getState) {
+        return router?.getState()?.path || '';
+      }
+    });
+    return '';
   };
 
   // 获取页面标题(除wx以外其他平台)

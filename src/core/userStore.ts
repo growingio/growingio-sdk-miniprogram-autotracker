@@ -50,8 +50,7 @@ class UserStore implements UserStoreType {
     }
     // 存储中拿不到尝试设新值
     if (!this._uid) {
-      this._uid = guid();
-      minipInstance.setStorage(this._getUidKey(), this._uid);
+      this.setUid(guid());
     }
     return this._uid;
   };

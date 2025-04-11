@@ -17,11 +17,9 @@
     "build:tt": "rollup -c rollup.config.js --tt",
     "build:uniapp": "rollup -c rollup.config.js --framework-uniapp",
     "build:wx": "rollup -c rollup.config.js --wx",
-    "build": "./bin/build.sh",
-    "lint": "eslint --fix 'src/**/*.{js,ts}'",
-    "test": "./bin/test/autoTest-wechat.sh",
-    "test:taro3-react": "./bin/test/autoTest-taro3-react.sh",
-    "test:taro3-vue3": "./bin/test/autoTest-taro3-vue3.sh"
+    "build:xhs": "rollup -c rollup.config.js --xhs",
+    "build": "npm run build:wx && npm run build:my && npm run build:tt && npm run build:swan && npm run build:ks && npm run build:jd && npm run build:xhs && npm run build:qq && npm run build:tb && npm run build:quickapp && npm run build:uniapp && npm run build:taro && npm run build:plugins",
+    "lint": "eslint --fix 'src/**/*.{js,ts}'"
   },
   "repository": {
     "type": "git",
@@ -136,6 +134,10 @@
     "./plugins/gioMultipleInstances": {
       "import": "./dist/plugins/gioMultipleInstances.js",
       "require": "./dist/plugins/gioMultipleInstances.js"
+    },
+    "./plugins/gioPerformance": {
+      "import": "./dist/plugins/gioPerformance.js",
+      "require": "./dist/plugins/gioPerformance.js"
     }
   }
 }

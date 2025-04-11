@@ -33,6 +33,10 @@ class GioABTest {
   public url: any;
   // 接口重试计数
   public retryCount: number;
+  // 标记当前是否为新访问设备
+  public newDevice: boolean;
+  // 各个实例新设备进入时的sessionId；小程序没有刷新页面保持session的问题，所以存在内存里就可以
+  public visitSids: any;
   constructor(public growingIO: GrowingIOType, options: any) {
     this.pluginVersion = '__PLUGIN_VERSION__';
     const {
@@ -41,8 +45,9 @@ class GioABTest {
       requestTimeout
     } = options ?? {};
     this.timeoutCheck(requestInterval, requestTimeout);
-    const { emitter } = this.growingIO;
+    const { emitter, userStore } = this.growingIO;
     this.growingIO.getABTest = this.getABTest;
+    this.visitSids = {};
     emitter.on(EMIT_MSG.OPTION_INITIALIZED, () => {
       if (!isEmpty(abServerUrl)) {
         this.abtStorageCheck();
@@ -59,6 +64,21 @@ class GioABTest {
           '如果您需要使用ABTest功能，请配置服务地址 abServerUrl!',
           'warn'
         );
+      }
+    });
+    emitter.on(EMIT_MSG.UID_UPDATE, ({ newUId, oldUId }) => {
+      // 没有旧deviceId说明是第一次进入的新设备
+      if (!oldUId && newUId) {
+        if (isString(abServerUrl)) {
+          const trackingId = this.growingIO.trackingId;
+          const sId = userStore.getSessionId(trackingId);
+          this.visitSids[trackingId] = sId;
+        } else if (isObject(abServerUrl)) {
+          keys(abServerUrl).forEach((trackingId: string) => {
+            const sId = userStore.getSessionId(trackingId);
+            this.visitSids[trackingId] = sId;
+          });
+        }
       }
     });
     this.retryCount = 0;
@@ -121,6 +141,14 @@ class GioABTest {
 
   // 生成数据接口地址
   generateUrl = (trackingId: string, abServerUrl: string) => {
+    // 如果是延迟初始化的实例，当前又是首次进入设备，要补充把session存起来
+    if (this.newDevice && !this.visitSids[trackingId]) {
+      // 这里要用userStore中的getSessionId，调用这个方法的时候实例肯定已经初始化了
+      // 如果是新初始化可以通过getSessionId准确获取sessionExpires来生成准确的session值;
+      // 如果是旧实例则直接用存储中的sessionId
+      this.visitSids[trackingId] =
+        this.growingIO.userStore.getSessionId(trackingId);
+    }
     if (!startsWith(abServerUrl, 'http')) {
       this.url[
         trackingId
@@ -169,7 +197,7 @@ class GioABTest {
     callback: any
   ) => {
     const {
-      userStore: { getUid },
+      userStore: { getUid, getSessionId },
       dataStore,
       minipInstance
     } = this.growingIO;
@@ -182,7 +210,8 @@ class GioABTest {
         accountId: projectId,
         datasourceId: dataSourceId,
         distinctId: getUid(),
-        layerId
+        layerId,
+        newDevice: this.visitSids[trackingId] === getSessionId(trackingId)
       },
       timeout: this.requestTimeout,
       success: ({ data }: any) => {

@@ -17,6 +17,7 @@ class EventHooks implements EventHooksType {
   public defPageCbs: any;
   public appHandlers: string[];
   public pageHandlers: string[];
+  public shareEventTypes: string[];
   public actionEventTypes: string[];
   public originalApp: (any: any) => any;
   public originalPage: (any: any) => any;
@@ -33,6 +34,7 @@ class EventHooks implements EventHooksType {
     this.defPageCbs = {};
     this.appHandlers = config.appHandlers;
     this.pageHandlers = config.pageHandlers;
+    this.shareEventTypes = config.shareEventTypes;
     this.actionEventTypes = config.actionEventTypes;
     this.appEffects = new AppEffects(this.growingIO);
     this.pageEffects = new PageEffects(this.growingIO);
@@ -115,7 +117,7 @@ class EventHooks implements EventHooksType {
         let result;
         try {
           // 分享处理
-          if (eventName === 'onShareAppMessage') {
+          if (self.shareEventTypes.includes(eventName)) {
             // 先执行分享的生命周期拿到分享数据
             // 与基础库保持一致，没有返回值时默认使用{}
             result = method.apply(this, args) ?? {};
@@ -160,7 +162,7 @@ class EventHooks implements EventHooksType {
           consoleText(error, 'error');
         }
         // 执行分享之外的生命周期函数
-        if (eventName !== 'onShareAppMessage') {
+        if (!self.shareEventTypes.includes(eventName)) {
           result = method.apply(this, args);
         }
         self.growingIO.emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {

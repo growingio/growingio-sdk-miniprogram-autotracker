@@ -23,6 +23,7 @@ const Config: PlatformConfigType = {
     'onReachBottom', // 实际sdk不会执行，但需要写在hook里，防止被归为自定义事件
     'onResize' // 实际sdk不会执行，但需要写在hook里，防止被归为自定义事件
   ],
+  shareEventTypes: ['onShareAppMessage'],
   actionEventTypes: [
     'onclick',
     'tap',

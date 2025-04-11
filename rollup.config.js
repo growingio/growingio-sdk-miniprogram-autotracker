@@ -19,7 +19,8 @@ const platform = processENV[0];
 // 框架平台
 const frameName = processENV[1];
 // 插件实例的入口名
-const pluginInstanceName = frameName || platform === 'tb' ? frameName || platform : 'base';
+const pluginInstanceName =
+  frameName || platform === 'tb' ? frameName || platform : 'base';
 // 小程序平台文件名枚举
 const PLATFORMS = {
   wx: 'wechat',
@@ -30,20 +31,22 @@ const PLATFORMS = {
   ks: 'kuaishou',
   tb: 'taobao',
   jd: 'jingdong',
-  quickapp: 'quickapp'
+  quickapp: 'quickapp',
+  xhs: 'xiaohongshu'
 };
 
 // 控制台打印当前打包的环境和小程序平台
 console.log(
-  `Packaging ${PLATFORMS[platform]
-    ? 'platform：' + PLATFORMS[platform]
-    : 'framework：' + frameName
+  `Packaging ${
+    PLATFORMS[platform]
+      ? 'platform：' + PLATFORMS[platform]
+      : 'framework：' + frameName
   }`
 );
 
 const fileName = () => {
   let n = 'dist/';
-  n += (PLATFORMS[platform] || frameName);
+  n += PLATFORMS[platform] ?? frameName;
   n += '.js';
   return n;
 };

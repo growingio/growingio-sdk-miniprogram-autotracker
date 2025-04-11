@@ -7,12 +7,13 @@ import { isNumber, isString, toString } from '@@/utils/glodash';
 
 /**
  * 一些id的合法性校验
- * @param id // 只允许数字和字符串，不允许为空字符串、0、负数
+ * @param id // 只允许数字和字符串，不允许为空字符串、0、负数、短横线字符串null,undefined
  */
 
 export const verifyId = (o: string | number) =>
-  (isString(o) && (o as string).length > 0) ||
-  (isNumber(o) && (o as number) > 0);
+  ((isString(o) && (o as string).length > 0) ||
+    (isNumber(o) && (o as number) > 0)) &&
+  !['-', 'null', 'undefined'].includes(o as string);
 
 /**
  * 初始化时的一些合法性校验

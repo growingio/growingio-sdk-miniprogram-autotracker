@@ -7,6 +7,7 @@ export type PLATFORMS =
   | 'bytedance'
   | 'kuaishoup'
   | 'jdp'
+  | 'xhsp'
   | 'quickapp';
 export type PLATFORMTYPES =
   | 'wx'
@@ -17,6 +18,7 @@ export type PLATFORMTYPES =
   | 'tt'
   | 'ks'
   | 'jd'
+  | 'xhs'
   | 'quickapp';
 
 export type FRAMEWORKS = 'taro' | 'uniapp' | 'full';
@@ -27,6 +29,7 @@ export interface PlatformConfigType {
   scnPrefix?: string;
   appHandlers?: string[];
   pageHandlers?: string[];
+  shareEventTypes?: string[];
   actionEventTypes?: string[];
   hooks?: {
     App: boolean;

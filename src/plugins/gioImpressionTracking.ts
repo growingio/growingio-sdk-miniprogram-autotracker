@@ -107,6 +107,8 @@ class GioImpressionTracking {
         return collectTarget.route
           ? toString(hashCode(collectTarget.route)) // swan page
           : collectTarget.__nodeId__; // swan component
+      case 'xhs':
+        return collectTarget.pageId;
       default:
         break;
     }
@@ -216,7 +218,7 @@ class GioImpressionTracking {
       originObserver.disconnect();
     }
     // 创建一个新的监听
-    let observer = ['swan', 'jd'].includes(gioPlatform)
+    let observer = ['swan', 'jd', 'xhs'].includes(gioPlatform)
       ? minipInstance.minip?.createIntersectionObserver(
           collectTarget,
           observerOption

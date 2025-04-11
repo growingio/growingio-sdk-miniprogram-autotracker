@@ -54,7 +54,7 @@ export interface Location {
 }
 
 export interface MinipInstanceType {
-  // 小程序原生对象 wx/my/tt/swan/qq/ks
+  // 小程序原生对象 wx/my/tt/swan/qq/ks/jd/xhs
   readonly minip: any;
   // 当前平台
   platform: PLATFORMS;

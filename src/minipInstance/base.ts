@@ -13,7 +13,8 @@ import {
   isString,
   last,
   typeOf,
-  isEmpty
+  isEmpty,
+  isArray
 } from '@@/utils/glodash';
 import EMIT_MSG from '@@/constants/emitMsg';
 import {
@@ -21,7 +22,8 @@ import {
   niceTry,
   getPlainMinip,
   getPlainPlatform,
-  getPlainConfig
+  getPlainConfig,
+  getPlainAppCode
 } from '@@/utils/tools';
 
 // 此基础实现类仅包含所有小程序，快应用所有方法全部单独实现
@@ -139,37 +141,65 @@ class BaseInstance implements MinipInstanceType {
     if (typeOf(instConfig) === 'string') {
       instConfig = niceTry(() => JSON.parse(instConfig)) ?? {};
     }
-    // 第一优先级在base中的hook setNavigationBarTitle设置的值(在dataStore page实例中实现)
-    // 第二优先级支持客户自己在页面中设置页面title
+    // 第一优先级在base中的hook setNavigationBarTitle设置的值(在dataStore page实例中实现，准确率最高)
+    // 第二优先级支持客户自己在页面中设置页面title（保持3.8的向下兼容，不准确但优先级高）
     const data = page?.data || page.$data || {};
     title = isString(data?.gioPageTitle) ? data?.gioPageTitle : '';
-    if (instConfig) {
-      // 第三优先级app生命周期中拿不到page对象，拿生命周期的参数来匹配
+
+    let instPage;
+    // 第三优先级取页面的配置json的navigationBarTitleText（仅部分支持）
+    if (!title) {
+      // 存在__[wx]AppCode__时尝试从__[wx]AppCode__中匹配
+      niceTry(() => {
+        const instAppCode = getPlainAppCode(platform);
+        if (instAppCode) {
+          instPage = instAppCode[`${page.route}.json`] || {};
+          title =
+            instPage?.navigationBarTitleText || // wx/qq/jd
+            instPage?.mod?.exports?.navigationBarTitleText; // ks
+        }
+      });
+    }
+    if (!title && instConfig) {
+      // 第四优先级在app生命周期中拿不到page对象，拿生命周期的参数来匹配
       const { enterParams } = this.growingIO.dataStore.eventHooks.appEffects;
       if (!page.route && !isEmpty(enterParams)) {
         page.route = enterParams.path || '';
-        title = this._getTitleFromTabBar(instConfig, page.route);
+        title = page.route
+          ? this._getTitleFromTabBar(instConfig, page.route)
+          : '';
       }
-      // 第四优先级取页面的navigationBarTitleText
-      niceTry(() => {
-        if (!title) {
-          const instPage = instConfig.page || {};
-          const pageInfo =
-            instPage[page.route] || instPage[`${page.route}.html`];
-          if (pageInfo) {
-            title = pageInfo?.window?.navigationBarTitleText;
-          } else if (['wx', 'tt'].includes(platform)) {
-            title = (instConfig || global || $global)?.global?.window
-              ?.navigationBarTitleText;
-          } else {
-            title = (instConfig || global || $global)?.window
-              ?.navigationBarTitleText;
-          }
+
+      // 第五优先级存在pages数组或page对象时尝试从page中匹配（大概率匹配不到，跟框架有关）
+      if (!title) {
+        if (isArray(instConfig.pages)) {
+          instPage = instConfig.pages.find((o) => o.path === page.route) ?? {};
+        } else {
+          instPage = instConfig.page || {};
         }
-      });
-      // 第五优先级取tabBar配置
+        if (instPage) {
+          const pageInfo =
+            instPage[page.route] || instPage[`${page.route}.html`] || instPage;
+          title =
+            pageInfo?.navigationBarTitleText ||
+            pageInfo?.window?.navigationBarTitleText;
+        }
+      }
+
+      // 第六优先级取tabBar配置匹配（只有tabbar的4个页面有机会）
       if (!title) {
         title = this._getTitleFromTabBar(instConfig, page.route);
+      }
+    }
+
+    // 第七优先级兜底取全局window的navigationBarTitleText
+    if (!title) {
+      if (['wx', 'tt'].includes(platform)) {
+        title = (instConfig || global || $global)?.global?.window
+          ?.navigationBarTitleText;
+      } else {
+        title = (instConfig || global || $global)?.window
+          ?.navigationBarTitleText;
       }
     }
     return limitString(title);

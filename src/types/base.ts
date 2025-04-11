@@ -36,7 +36,11 @@ export interface UserOptions {
   // session保活时长（5分钟）
   keepAlive: number;
   // 性能采集配置
-  performance?: { monitor: boolean; exception: boolean };
+  performance?: {
+    monitor: boolean;
+    exception: boolean;
+    network: boolean;
+  };
   // 请求超时时长
   requestTimeout?: number;
   // 数据上报域名

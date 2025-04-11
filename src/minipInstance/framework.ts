@@ -1,5 +1,6 @@
 import { getPlainPlatform } from '@@/utils/tools';
 
+import XiaoHongShu from './xhs';
 import JingDong from './jd';
 import KuaiShou from './ks';
 import Alipay from './my';
@@ -16,7 +17,8 @@ const INST = {
   qq: QQ,
   tt: Bytedance,
   ks: KuaiShou,
-  jd: JingDong
+  jd: JingDong,
+  xhs: XiaoHongShu
 };
 
 export default INST[plainPlatform];

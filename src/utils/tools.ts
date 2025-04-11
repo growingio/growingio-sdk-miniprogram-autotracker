@@ -126,8 +126,13 @@ export const getOS = (system: any, configName: string) => {
       return `${configName}-Android`;
     } else if (lowsys.indexOf('ios') !== -1) {
       return `${configName}-iOS`;
+    } else if (
+      lowsys.indexOf('harmonyos') !== -1 ||
+      lowsys.indexOf('ohos') !== -1
+    ) {
+      return `${configName}-HarmonyOS`;
     } else {
-      return system;
+      return `${configName}-${system}`;
     }
   }
 };
@@ -214,10 +219,13 @@ export const getPlainMinip = (platform?: string) => {
         return ks;
       case 'jd':
         return jd;
+      case 'xhs':
+        return xhs;
       // 第三方框架下自动获取实例
       // 百度等小程序中可能存在封装过的wx对象，因此wx要放在最后判断
       default: {
         let minip;
+        if (!minip) minip = niceTry(() => xhs);
         if (!minip) minip = niceTry(() => swan);
         if (!minip) minip = niceTry(() => my);
         if (!minip) minip = niceTry(() => tt);
@@ -251,9 +259,30 @@ export const getPlainConfig = (platform?: string) => {
         return __ksConfig; // 新版快手小程序已经拿不到了
       case 'jd':
         return __jdConfig;
+      case 'xhs':
+        return __MP_APP_JSON_MIGRATION__ ?? __MP_APP_JSON__;
       // 第三方框架下自动获取实例
       default:
         // 支付宝和淘宝不存在可获取的全局对象
+        return undefined;
+    }
+  });
+};
+
+export const getPlainAppCode = (platform?: string) => {
+  return niceTry(() => {
+    switch (platform) {
+      // 指定平台获取实例
+      case 'wx':
+      case 'qq':
+        return __wxAppCode__;
+      case 'tt':
+        return __allConfig__;
+      case 'ks':
+        return __module__;
+      case 'jd':
+        return __jdAppCode__;
+      default:
         return undefined;
     }
   });
@@ -263,6 +292,7 @@ export const getPlainConfig = (platform?: string) => {
 export const getPlainPlatform = () => {
   // 百度等小程序中可能存在封装过的wx对象，因此wx要放在最后判断
   let platform;
+  if (!platform && niceTry(() => xhs)) platform = 'xhs';
   if (!platform && niceTry(() => swan)) platform = 'swan';
   if (!platform && niceTry(() => tt)) platform = 'tt';
   if (!platform && niceTry(() => qq)) platform = 'qq';

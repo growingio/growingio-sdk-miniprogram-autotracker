@@ -33,10 +33,10 @@ class Uploader implements UploaderType {
     this.retryLimit = 2;
     this.retryIds = {};
     this.requestingNum = 0;
-    const { emitter, vdsConfig, plugins } = this.growingIO;
-    emitter.on(
+    this.growingIO.emitter.on(
       EMIT_MSG.ON_SEND_BEFORE,
       ({ eventsQueue, requestData, trackingId }) => {
+        const { vdsConfig, plugins } = this.growingIO;
         // 核心逻辑中只发送主实例的事件
         if (trackingId === this.growingIO.trackingId) {
           if (vdsConfig?.tbConfig?.cloudAppId) {
@@ -223,6 +223,11 @@ class Uploader implements UploaderType {
             this.requestFailFn(o);
           });
           consoleText(`请求失败!${JSON.stringify(result)}`, 'error');
+          emitter.emit(EMIT_MSG.ON_SEND_ERROR, {
+            eventsQueue,
+            requestData,
+            trackingId
+          });
         }
       },
       complete: (args: any) => {

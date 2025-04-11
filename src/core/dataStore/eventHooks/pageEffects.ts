@@ -102,6 +102,7 @@ class PageEffects {
       case pageListeners.pageUnload: {
         break;
       }
+      case pageListeners.shareChat: // 小红书特有事件
       case pageListeners.shareApp: {
         toggleShareOut(true);
         trackersExecute((trackingId: string) => {

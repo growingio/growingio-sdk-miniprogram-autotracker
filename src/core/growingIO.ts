@@ -65,6 +65,7 @@ class GrowingIO implements GrowingIOType {
   // 当前主SDK的trackingId，用于区分事件归属。
   public trackingId: string;
   public subInstance: any;
+  private _identified: boolean;
   constructor() {
     this.utils = { ...glodash, ...tools, qs };
     this.emitter = mitt();
@@ -288,6 +289,8 @@ class GrowingIO implements GrowingIOType {
       this.userStore.setUid(asId);
       // 修改forceLogin配置项
       this.dataStore.setOption(this.trackingId, 'forceLogin', false);
+      // 标记当前已被identify过
+      this._identified = true;
       // 为已积压的请求使用assignmentId全部赋值deviceId
       this.dataStore.trackersExecute((tid: string) => {
         const hq = this.uploader.getHoardingQueue(tid);
@@ -295,6 +298,8 @@ class GrowingIO implements GrowingIOType {
         // 发送积压队列中的请求
         this.uploader.initiateRequest(tid, true);
       });
+    } else if (this._identified) {
+      callError('identify', !1, '请勿重复调用');
     } else {
       callError('identify', !1, 'forceLogin未开启');
     }
@@ -338,9 +343,14 @@ class GrowingIO implements GrowingIOType {
       userId = toString(userId).slice(0, 1000);
       userKey = toString(userKey).slice(0, 1000);
       this.userStore.setUserId(trackingId, userId);
+      const processedUserKey =
+        !isNil(userKey) && toString(userKey).length > 0
+          ? toString(userKey).slice(0, 1000)
+          : '';
+      this.userStore.setUserKey(trackingId, processedUserKey);
       const { idMapping } = this.dataStore.getTrackerVds(trackingId);
-      if (idMapping) {
-        this.userStore.setUserKey(trackingId, isNil(userKey) ? '' : userKey);
+      if (!idMapping && processedUserKey) {
+        consoleText('您设置了 userKey ，请初始化开启 idMapping!', 'warn');
       }
       // 切换userId时重置session
       if (prevId && prevId !== userId) {

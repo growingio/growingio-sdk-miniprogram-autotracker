@@ -9,6 +9,7 @@ export default {
   ON_SDK_INITIALIZE_BEFORE: 'ON_SDK_INITIALIZE_BEFORE', // SDK开始初始化之前
   ON_SEND_AFTER: 'ON_SEND_AFTER', // 插件生命周期：发送事件后
   ON_SEND_BEFORE: 'ON_SEND_BEFORE', // 插件生命周期：发送事件前
+  ON_SEND_ERROR: 'ON_SEND_ERROR', // 插件生命周期：发送事件错误
   OPTION_CHANGE: 'OPTION_CHANGE', // 设置变更事件
   OPTION_INITIALIZED: 'OPTION_INITIALIZED', // 配置项初始化完成
   SCENE_UPDATE: 'SCENE_UPDATE', // scene变更事件

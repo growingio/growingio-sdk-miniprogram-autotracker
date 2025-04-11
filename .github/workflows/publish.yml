@@ -21,7 +21,7 @@ jobs:
       - name: Build
         run: rm -r dist && npm install && npm run build
       - name: Publish
-        run: yarn publish --tag latest --non-interactive --access public
+        run: npm publish --tag latest --non-interactive --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
   release:

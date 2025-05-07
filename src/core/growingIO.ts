@@ -18,7 +18,8 @@ import {
   getPlainPlatform,
   guid,
   limitObject,
-  niceCallback
+  niceCallback,
+  qsParse
 } from '@@/utils/tools';
 import { ALLOW_SET_OPTIONS, DEFAULT_SETTINGS } from '@@/constants/config';
 import { DataStoreType, OriginOptions } from '@@/types/dataStore';
@@ -615,6 +616,19 @@ class GrowingIO implements GrowingIOType {
           ];
         }
       });
+    }
+    // 只有主实例有可能会带圈选的字段
+    if (trackingId === this.trackingId) {
+      // 小程序处于圈选状态时，把圈选上报地址带给web
+      const { circleServerUrl, circleOpen } =
+        this.plugins?.gioEventAutoTracking ?? {};
+      if (circleServerUrl && circleOpen) {
+        // infos.giocircleserverurl = encodeURIComponent(circleServerUrl);
+        const circleParam: any = qsParse(circleServerUrl.split('?')[1]);
+        if (circleParam.roomId) {
+          infos.giocircleroomid = circleParam.roomId;
+        }
+      }
     }
     return qs.stringify(infos);
   };

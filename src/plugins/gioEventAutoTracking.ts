@@ -5,17 +5,21 @@
 import { ID_REG, SWAN_XID_REG, TARO_XID_REG } from '@@/constants/regex';
 import { EventTarget } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
-import { consoleText, isTaro3 } from '@@/utils/tools';
+import { consoleText, getExtraData, isTaro3 } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
+import { isEmpty } from '@@/utils/glodash';
 
 let ut;
 class GioEventAutoTracking {
   public pluginVersion: string;
   private prevEvent: any;
+  public circleServerUrl: string;
+  public circleOpen = false;
   constructor(public growingIO: GrowingIOType) {
     this.pluginVersion = '__PLUGIN_VERSION__';
     ut = this.growingIO.utils;
     this.prevEvent = {};
+    this.listenForLunchEvent();
   }
 
   main = (e: EventTarget, eventName: string) => {
@@ -182,6 +186,100 @@ class GioEventAutoTracking {
       );
       eventInterceptor(event);
     }
+  };
+
+  // --------------------- 以下内容是对新版小程序圈选的支持 ---------------------
+
+  // 监听小程序的onLunch事件
+  listenForLunchEvent = () => {
+    const { emitter } = this.growingIO;
+    emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event, params }) => {
+      if (['App onLaunch', 'App onShow'].includes(event)) {
+        this.circleInit(params);
+      }
+    });
+  };
+
+  // 初始化圈选
+  circleInit = (params: any) => {
+    const { emitter } = this.growingIO;
+    const extraData = getExtraData(params.referrerInfo?.extraData);
+    // 额外参数中存在gdpCircleRoomCollectUrl，则表示是圈选的跳转，进入圈选状态
+    if (extraData?.gdpCircleRoomCollectUrl) {
+      // 圈选初始化
+      if (this.circleServerUrl !== extraData?.gdpCircleRoomCollectUrl) {
+        this.circleServerUrl = extraData?.gdpCircleRoomCollectUrl;
+        // 提前移除一次事件发送监听，防止重复监听
+        emitter.off(EMIT_MSG.ON_SEND_AFTER, this.collectorSendFn);
+        // 添加事件发送监听，用于发送圈选事件
+        emitter.on(EMIT_MSG.ON_SEND_AFTER, this.collectorSendFn);
+        this.showPromptModal('enter');
+      }
+      this.circleOpen = true;
+    }
+  };
+
+  // 数据采集发送监听回调
+  collectorSendFn = ({ requestData, trackingId }) => {
+    const { uploader } = this.growingIO;
+    if (this.circleOpen) {
+      // 过滤仅主实例的非CUSTOM事件可以圈选
+      const filteredEvents = requestData.filter(
+        (e) =>
+          e.eventType !== 'CUSTOM' && trackingId === this.growingIO.trackingId
+      );
+      if (!isEmpty(filteredEvents)) {
+        // 同时请求数在3个以下直接发起请求
+        if (uploader.requestingNum < uploader.requestLimit) {
+          this.circleRequest(filteredEvents);
+        } else {
+          // 同时有3个请求在发送时，设轮询延时直到请求数在3个以下
+          let t = setInterval(() => {
+            if (uploader.requestingNum < uploader.requestLimit) {
+              this.circleRequest(filteredEvents);
+              clearInterval(t);
+              t = undefined;
+            }
+          }, 500);
+        }
+      }
+    }
+  };
+
+  // 圈选结束
+  circleClose = () => {
+    this.circleOpen = false;
+    this.circleServerUrl = '';
+    this.growingIO.emitter.off(EMIT_MSG.ON_SEND_AFTER, this.collectorSendFn);
+  };
+
+  // 展示圈选提示
+  showPromptModal = (type: 'enter' | 'error', msg?: string) => {
+    this.growingIO.minipInstance.minip.showModal({
+      title: 'GrowingIO提示',
+      content: type === 'error' ? msg : '您已进入圈选模式',
+      showCancel: false
+    });
+  };
+
+  // 发起圈选请求
+  circleRequest = (requestData: any) => {
+    const { minipInstance } = this.growingIO;
+    minipInstance.request({
+      url: this.circleServerUrl,
+      header: { 'content-type': 'application/json;charset=UTF-8' },
+      method: 'POST',
+      data: requestData,
+      complete: ({ statusCode, data, errMsg }: any) => {
+        if (![200, 204].includes(statusCode) || !data?.success) {
+          this.showPromptModal(
+            'error',
+            data?.message || data || errMsg || '圈选请求失败，请重试!'
+          );
+          this.circleClose();
+        }
+      }
+    });
   };
 }
 

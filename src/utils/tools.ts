@@ -446,11 +446,24 @@ export const hashCode = (string: string, abs = false) => {
   return abs ? Math.abs(hash) : hash;
 };
 
+export const getExtraData = (data: any) => {
+  if (isString(data)) {
+    return niceTry(() => JSON.parse(data)) ?? {};
+  } else {
+    return data ?? {};
+  }
+};
+
 // 获取额外的启动参数并合并进query
-export const getLaunchQuery = (originQuery: any = {}, extraData: any = {}) => {
+export const getLaunchQuery = (originQuery: any = {}, data: any = {}) => {
   const validData = {};
+  const extraData = getExtraData(data);
   keys(extraData).forEach((k: string) => {
-    if (['string', 'number', 'boolean'].includes(typeOf(extraData[k]))) {
+    // 排除掉新版圈选用的标记字段
+    if (
+      k !== 'gdpCircleRoomCollectUrl' &&
+      ['string', 'number', 'boolean'].includes(typeOf(extraData[k]))
+    ) {
       validData[k] = extraData[k];
     }
   });

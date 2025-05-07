@@ -17,6 +17,7 @@ class AppEffects {
       platformConfig,
       uploader,
       dataStore,
+      minipInstance,
       dataStore: {
         trackersExecute,
         shareOut,
@@ -81,6 +82,8 @@ class AppEffects {
             userStore.setSessionId(trackingId);
           });
         }
+        // 添加网络状态变更监听
+        minipInstance.setNetworkStatusListener();
         break;
       }
       case appListeners.appClose: {

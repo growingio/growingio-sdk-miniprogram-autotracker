@@ -217,6 +217,17 @@ class QuickApp extends BaseImplements {
       });
     });
   };
+
+  // 监听网络变更
+  setNetworkStatusListener = () => {
+    network.subscribe({
+      callback: (data) => {
+        if (data.type) {
+          this.network.networkType = data.type;
+        }
+      }
+    });
+  };
 }
 
 export default QuickApp;

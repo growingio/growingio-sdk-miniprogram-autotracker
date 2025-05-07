@@ -338,6 +338,15 @@ class BaseInstance implements MinipInstanceType {
       this.minip?.getSetting({ success: resolve, fail: resolve });
     });
   };
+
+  // 监听网络变更
+  setNetworkStatusListener = () => {
+    this.minip?.onNetworkStatusChange(({ networkType }) => {
+      if (networkType) {
+        this.network.networkType = networkType;
+      }
+    });
+  };
 }
 
 export default BaseInstance;

@@ -232,7 +232,11 @@ class Uploader implements UploaderType {
       },
       complete: (args: any) => {
         this.requestingNum -= 1;
-        emitter.emit(EMIT_MSG.ON_SEND_AFTER, { result: args, requestData });
+        emitter.emit(EMIT_MSG.ON_SEND_AFTER, {
+          result: args,
+          requestData,
+          trackingId
+        });
         this.initiateRequest(trackingId);
       }
     });

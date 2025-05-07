@@ -123,4 +123,6 @@ export interface MinipInstanceType {
   getSystemInfo?: () => Promise<SystemInfo>;
   // 获取小程序设置
   getSetting?: () => any;
+  // 监听网络变更
+  setNetworkStatusListener?: () => any;
 }

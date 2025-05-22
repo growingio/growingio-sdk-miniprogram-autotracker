@@ -203,7 +203,9 @@ class GioEventAutoTracking {
   // 初始化圈选
   circleInit = (params: any) => {
     const { emitter } = this.growingIO;
-    const extraData = getExtraData(params.referrerInfo?.extraData);
+    const extraData = getExtraData(
+      params.referrerInfo?.extraData || params.query || {}
+    );
     // 额外参数中存在gdpCircleRoomCollectUrl，则表示是圈选的跳转，进入圈选状态
     if (extraData?.gdpCircleRoomCollectUrl) {
       // 圈选初始化

@@ -1,4 +1,4 @@
-import { compareVersion } from '@@/utils/tools';
+import { compareVersion, consoleText } from '@@/utils/tools';
 import { GrowingIOType } from '@@/types/growingIO';
 import { isFunction } from '@@/utils/glodash';
 import BaseImplements from './base';
@@ -92,6 +92,39 @@ class Alipay extends BaseImplements {
       }, (timeout || 10000) + 10);
     }
     return requestTask;
+  };
+
+  // 执行支付宝特有的promise分享
+  handleSharePromise = (originResult, handlePromiseResult) => {
+    // 创建监听_result变化的Promise
+    const alipayPromise = new Promise((resolve) => {
+      // 如果已有_result直接返回
+      if (originResult._result) {
+        resolve(originResult._result);
+        return;
+      }
+      // 监听_result属性变化
+      Object.defineProperty(originResult, '_result', {
+        set(value) {
+          this.__result = value;
+          resolve(value);
+        },
+        get() {
+          return this.__result;
+        }
+      });
+    });
+    // 如果三秒内不resolve结果，分享会使用原默认参数
+    Promise.race([
+      alipayPromise,
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(originResult._result || {});
+        }, 3000);
+      })
+    ])
+      .then(handlePromiseResult)
+      .catch((error) => consoleText(error, 'error'));
   };
 }
 

@@ -108,7 +108,9 @@ class GioImpressionTracking {
           ? toString(hashCode(collectTarget.route)) // swan page
           : collectTarget.__nodeId__; // swan component
       case 'xhs':
-        return collectTarget.pageId;
+        return collectTarget.route
+          ? collectTarget.pageId // xhs page
+          : collectTarget.componentId; // xhs component
       default:
         break;
     }
@@ -119,9 +121,10 @@ class GioImpressionTracking {
     const { gioPlatform } = this.growingIO;
     if (
       (gioPlatform === 'tt' && collectTarget.__nodeId__) ||
-      (gioPlatform === 'ks' && collectTarget.is)
+      (gioPlatform === 'ks' && collectTarget.is) ||
+      (gioPlatform === 'xhs' && collectTarget.componentId)
     ) {
-      // 字节和快手小程序页面监听时可以拿到自定义组件一次性完成监听，所以组件的节点实例不再处理
+      // 字节/快手/小红书小程序页面监听时可以拿到自定义组件一次性完成监听，所以组件的节点实例不再处理
       return false;
     }
     const nodeId = this.getNodeId(collectTarget);

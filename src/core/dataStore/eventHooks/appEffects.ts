@@ -1,6 +1,6 @@
 import { AppHookLifeCircle } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
-import { isEmpty, typeOf } from '@@/utils/glodash';
+import { isEmpty, typeOf, unset } from '@@/utils/glodash';
 import { getLaunchQuery, qsStringify } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
 
@@ -124,6 +124,8 @@ class AppEffects {
       rQuery = query || args.query;
       rAppId = referrerInfo?.appId || args?.referrerInfo?.appId || '';
       dataStore.scene = scene || args.scene;
+      // 移除某些小程序圈选时我们带入的圈选地址参数
+      unset(query, 'gdpCircleRoomCollectUrl');
       // 来源有额外参数时并入页面参数
       if (!isEmpty(referrerInfo?.extraData)) {
         rQuery = qsStringify(getLaunchQuery(rQuery, referrerInfo.extraData));

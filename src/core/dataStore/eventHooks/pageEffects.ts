@@ -67,7 +67,7 @@ class PageEffects {
     switch (event) {
       case pageListeners.pageLoad: {
         // 获取一次页面参数存起来，防止类似支付宝小程序只能通过生命周期获取页面参数或页面堆栈拿不到页面参数，做兜底
-        currentPage.queryOption[path] =
+        currentPage.queryOptions[path] =
           get(page, 'options') ||
           get(page, '__displayReporter.query') ||
           get(page, '$page.query') ||
@@ -75,7 +75,10 @@ class PageEffects {
           get(page, '$taroParams') ||
           args[0] ||
           {};
-        unset(currentPage.queryOption[path], '$taroTimestamp');
+        unset(currentPage.queryOptions[path], [
+          '$taroTimestamp',
+          'gdpCircleRoomCollectUrl'
+        ]);
         break;
       }
       case pageListeners.pageShow: {
@@ -114,6 +117,9 @@ class PageEffects {
         break;
       }
       case pageListeners.shareTime: {
+        if (minipInstance.platform === 'xhsp') {
+          toggleShareOut(true);
+        }
         trackersExecute((trackingId: string) => {
           const { followShare } = getTrackerVds(trackingId);
           if (followShare) {

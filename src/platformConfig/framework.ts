@@ -1,5 +1,6 @@
 import { niceTry, getPlainPlatform } from '@@/utils/tools';
 
+import XHSConfig from './xhs';
 import JDConfig from './jd';
 import KSConfig from './ks';
 import MyConfig from './my';
@@ -12,6 +13,7 @@ import WXConfig from './wx';
 const plainPlatform = getPlainPlatform();
 const FrameworkConfig = niceTry(() => {
   const INST = {
+    xhs: XHSConfig,
     jd: JDConfig,
     ks: KSConfig,
     my: MyConfig,

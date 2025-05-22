@@ -582,7 +582,7 @@ class DataStore implements DataStoreType {
     };
     event.attributes = limitObject({
       ...(event.attributes ?? {}),
-      $from: originResult.from,
+      $from: originResult?.from,
       $target: originResult?.target?.id,
       $share_title: updateResult?.title,
       $share_path: head(uri),

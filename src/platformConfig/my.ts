@@ -6,6 +6,7 @@ const MyConfig = {
   name: 'Alipay',
   platform: 'alip',
   scnPrefix: 'alip_',
+  shareEventTypes: ['onShareAppMessage'],
   hooks: {
     ...BaseConfig?.hooks,
     Behavior: false

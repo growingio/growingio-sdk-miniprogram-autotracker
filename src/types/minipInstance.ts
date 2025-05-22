@@ -125,4 +125,9 @@ export interface MinipInstanceType {
   getSetting?: () => any;
   // 监听网络变更
   setNetworkStatusListener?: () => any;
+  // 执行特有的分享promise
+  handleSharePromise?: (
+    originResult: any,
+    handlePromiseResult: () => void
+  ) => any;
 }

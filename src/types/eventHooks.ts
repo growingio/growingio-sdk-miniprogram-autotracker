@@ -76,7 +76,7 @@ export interface PageShareResult {
 }
 
 export interface MinipPageType {
-  queryOption: any;
+  queryOptions: any;
   configuredTitle: any;
   pageProps: any;
   lastLifecycle: string;
@@ -88,9 +88,10 @@ export interface MinipPageType {
   qsQuery: (query: any) => string;
   getReferralPage: (trackingId: string) => string;
   buildShareQuery: (result: PageShareResult) => [string, string];
-  updateAppMessageResult: (result: PageShareResult) => PageShareResult;
-  updateTimelineResult: (result: PageShareResult) => PageShareResult;
-  updateAddFavoritesResult: (result: PageShareResult) => PageShareResult;
+  updateShareResult: (
+    result: PageShareResult,
+    fillParams?: boolean
+  ) => PageShareResult;
   eventSetPageProps: (trackingId: string, event: EVENT) => any;
 }
 

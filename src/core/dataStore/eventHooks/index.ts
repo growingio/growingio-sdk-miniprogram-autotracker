@@ -1,6 +1,6 @@
 import { EventHooksType, MinipPageType } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
-import { has, isArray, isFunction, typeOf, unset } from '@@/utils/glodash';
+import { has, isArray, isEmpty, isFunction, typeOf } from '@@/utils/glodash';
 import { consoleText, getGlobal, niceTry } from '@@/utils/tools';
 
 import AppEffects from './appEffects';
@@ -87,95 +87,135 @@ class EventHooks implements EventHooksType {
     }
   };
 
-  // 生命周期方法effects
-  lifeFcEffects = (eventName: string, method: any, cType: 'App' | 'Page') => {
-    const self = this;
-    if (['onShareTimeline', 'onAddToFavorites'].includes(eventName)) {
-      // onShareTimeline和onAddToFavorites不能异步执行，单独处理
-      return function (...args) {
-        let result = method.apply(this, args);
-        if (
-          eventName === 'onShareTimeline' &&
-          self.growingIO.vdsConfig.followShare
-        ) {
-          result = self.currentPage.updateTimelineResult(result ?? {});
-        }
-        if (eventName === 'onAddToFavorites') {
-          result = self.currentPage.updateAddFavoritesResult(result ?? {});
-        }
-        const argsArray = Array.prototype.slice.call(args);
-        if (result) {
-          argsArray.push(result);
-        }
-        // 执行effects
-        self[`def${cType}Cbs`][eventName].apply(this, argsArray);
-        return result;
-      };
-    } else {
-      // 其他生命周期可以异步执行
-      return async function (...args) {
-        let result;
-        try {
-          // 分享处理
-          if (self.shareEventTypes.includes(eventName)) {
-            // 先执行分享的生命周期拿到分享数据
-            // 与基础库保持一致，没有返回值时默认使用{}
-            result = method.apply(this, args) ?? {};
-            // 如果分享事件是个promise函数，需要等待异步结果
-            if (typeOf(result) === 'promise') {
-              result = await result.then((r) => r);
-            }
-            // 如果返回的对象中包含promise，要等待异步结果
-            if (typeOf(result.promise) === 'promise') {
-              const f = async function () {
-                let sRes = result;
-                return new Promise((resolve) => {
-                  // 如果3秒后result.promise没有返回结果，则返回的是默认的result值
-                  // https://developers.weixin.qq.com/miniprogram/dev/reference/api/Page.html#onShareAppMessage-Object-object
-                  let t = setTimeout(() => {
-                    resolve({ ...sRes });
-                    clearTimeout(t);
-                    t = undefined;
-                  }, 3000);
-                  result.promise.then((res) => {
-                    sRes = res;
-                    resolve({ ...sRes });
-                    clearTimeout(t);
-                    t = undefined;
-                  });
-                });
-              };
-              result = { ...result, ...((await f()) as any) };
-              unset(result, 'promise');
-            }
-            if (self.growingIO.vdsConfig.followShare) {
-              result = self.currentPage.updateAppMessageResult(result ?? {});
-            }
-          }
-          const argsArray = Array.prototype.slice.call(args);
-          if (result) {
-            argsArray.push(result);
-          }
-          // 执行effects
-          self[`def${cType}Cbs`][eventName].apply(this, argsArray);
-        } catch (error) {
-          consoleText(error, 'error');
-        }
-        // 执行分享之外的生命周期函数
-        if (!self.shareEventTypes.includes(eventName)) {
-          result = method.apply(this, args);
-        }
-        self.growingIO.emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
-          event: `${cType} ${eventName}End`,
-          timestamp: Date.now(),
-          params: { instance: this, arguments: Array.from(args) }
-        });
-        return result;
-      };
+  /**
+   * 执行生命周期回调并广播事件
+   */
+  lifeFcEffectsFn = (instance, args, cType, eventName, result = undefined) => {
+    // 创建参数数组副本
+    const argsArray =
+      typeOf(args) === 'array' ? Array.prototype.slice.call(args) : [];
+    // 如果有结果，添加到参数列表
+    if (!isEmpty(result)) {
+      argsArray.push(result);
     }
+
+    // 执行effects
+    this[`def${cType}Cbs`][eventName].apply(instance, argsArray);
+
+    // 广播生命周期
+    this.growingIO.emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
+      event: `${cType} ${eventName}End`,
+      timestamp: Date.now(),
+      params: { instance, arguments: Array.from(argsArray) }
+    });
+
+    return result;
   };
 
-  // 自定义方法effects
+  /**
+   * 生命周期方法effects
+   */
+  lifeFcEffects = (eventName: string, method: any, cType: 'App' | 'Page') => {
+    const self = this;
+
+    return function (...args) {
+      let result;
+
+      // 分享事件单独处理
+      if (self.shareEventTypes.includes(eventName)) {
+        // 先执行分享的生命周期拿到分享数据
+        const originResult = method.apply(this, args) ?? {};
+
+        // sdk跟踪分享事件时才处理，否则直接返回原结果
+        if (!self.growingIO.vdsConfig.followShare) {
+          return originResult;
+        }
+        const isPromiseResult = typeOf(originResult) === 'promise';
+        const hasPromiseProperty = typeOf(originResult.promise) === 'promise';
+        // 支付宝的promise会被提前处理过，通过以下两个字段判断是否需要自定义promise
+        const isSpecialPromise =
+          has(originResult, '_result') && has(originResult, '_state');
+
+        // 处理异步分享结果
+        if (isPromiseResult || hasPromiseProperty || isSpecialPromise) {
+          // 创建处理Promise结果的通用函数
+          const handlePromiseResult = (promiseResult = {}) => {
+            try {
+              // 合并原始结果和Promise结果
+              const mergedResult = {
+                ...originResult,
+                ...promiseResult
+              };
+
+              // 更新分享内容
+              const updatedResult =
+                self.currentPage.updateShareResult(mergedResult);
+
+              // 执行回调
+              self.lifeFcEffectsFn(this, args, cType, eventName, updatedResult);
+            } catch (error) {
+              consoleText(error, 'error');
+            }
+          };
+
+          // 处理整个返回值是Promise的情况
+          if (isPromiseResult) {
+            // 如果三秒内不resolve结果，分享会使用原默认参数
+            Promise.race([
+              originResult,
+              new Promise((resolve) => {
+                setTimeout(() => {
+                  resolve({});
+                }, 3000);
+              })
+            ])
+              .then(handlePromiseResult)
+              .catch((error) => consoleText(error, 'error'));
+          }
+
+          // 处理返回值中包含promise属性的情况
+          if (hasPromiseProperty) {
+            // 如果三秒内不resolve结果，分享会使用原默认参数
+            Promise.race([
+              originResult.promise,
+              new Promise((resolve) => {
+                setTimeout(() => {
+                  resolve({});
+                }, 3000);
+              })
+            ])
+              .then(handlePromiseResult)
+              .catch((error) => consoleText(error, 'error'));
+          }
+
+          // 处理支付宝特有的promise
+          if (isSpecialPromise) {
+            self.growingIO.minipInstance?.handleSharePromise(
+              originResult,
+              handlePromiseResult
+            );
+          }
+
+          // 直接返回原分享结果继续执行原逻辑
+          result = self.currentPage.updateShareResult(originResult, false);
+        } else {
+          // 没有异步逻辑，直接更新分享内容执行回调
+          result = self.currentPage.updateShareResult(originResult);
+          self.lifeFcEffectsFn(this, args, cType, eventName, result);
+        }
+      } else {
+        // 其他生命周期事件：先执行回调，再执行原方法
+        self.lifeFcEffectsFn(this, args, cType, eventName);
+        result = method.apply(this, args);
+      }
+
+      return result;
+    };
+  };
+
+  /*
+   * 自定义方法effects
+   */
   customFcEffects = (eventName: string, method: any) => {
     const self = this;
     return function (...args) {

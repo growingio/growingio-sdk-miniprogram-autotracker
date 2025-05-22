@@ -467,5 +467,6 @@ export const getLaunchQuery = (originQuery: any = {}, data: any = {}) => {
       validData[k] = extraData[k];
     }
   });
+  unset(originQuery, 'gdpCircleRoomCollectUrl');
   return Object.assign({}, validData, originQuery);
 };

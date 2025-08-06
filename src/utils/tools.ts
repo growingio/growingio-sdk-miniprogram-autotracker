@@ -4,6 +4,7 @@ import {
   find,
   forEach,
   formatDate,
+  has,
   head,
   isArray,
   isDate,
@@ -16,7 +17,6 @@ import {
   split,
   startsWith,
   toString,
-  typeOf,
   unset
 } from '@@/utils/glodash';
 
@@ -454,19 +454,58 @@ export const getExtraData = (data: any) => {
   }
 };
 
-// 获取额外的启动参数并合并进query
-export const getLaunchQuery = (originQuery: any = {}, data: any = {}) => {
-  const validData = {};
-  const extraData = getExtraData(data);
-  keys(extraData).forEach((k: string) => {
-    // 排除掉新版圈选用的标记字段
-    if (
-      k !== 'gdpCircleRoomCollectUrl' &&
-      ['string', 'number', 'boolean'].includes(typeOf(extraData[k]))
-    ) {
-      validData[k] = extraData[k];
+/**
+ * 清理参数中的非法字段
+ * @param originQuery 原始查询参数，可以是对象或参数字符串
+ * @param extraData 额外数据，可以是对象或参数字符串
+ * @returns 清理后的纯净参数对象
+ */
+const dirtyKey = [
+  'wxShoppingListScene',
+  '$taroTimestamp',
+  'gdpCircleRoomCollectUrl'
+];
+export const getPureParams = (originQuery: any = {}, extraData: any = {}) => {
+  // 处理originQuery可能是字符串的情况
+  const parsedOriginQuery =
+    typeof originQuery === 'string' ? qsParse(originQuery) : originQuery || {};
+
+  // 递归清理函数
+  function cleanObject(obj, needCompare) {
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+      return obj;
     }
-  });
-  unset(originQuery, 'gdpCircleRoomCollectUrl');
-  return Object.assign({}, validData, originQuery);
+
+    const result = {};
+
+    keys(obj).forEach((key) => {
+      // 检查key是否包含dirtyKey中的任何字符串
+      const isKeyDirty = dirtyKey.some((dirty) => key.includes(dirty));
+      const isKeyExist = has(parsedOriginQuery, key);
+
+      if (!isKeyDirty && (needCompare ? !isKeyExist : true)) {
+        const value = obj[key];
+
+        // 检查value是否是字符串且包含dirtyKey中的任何字符串
+        if (typeof value === 'string') {
+          const isValueDirty = dirtyKey.some((dirty) => value.includes(dirty));
+          if (!isValueDirty) {
+            result[key] = value;
+          }
+        }
+        // 如果是数字和布尔值，直接保留，其他类型丢弃
+        else if (typeof value === 'number' || typeof value === 'boolean') {
+          result[key] = value;
+        }
+      }
+    });
+
+    return result;
+  }
+
+  return Object.assign(
+    {},
+    cleanObject(parsedOriginQuery, false),
+    cleanObject(extraData, true)
+  );
 };

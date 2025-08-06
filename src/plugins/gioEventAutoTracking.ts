@@ -5,9 +5,10 @@
 import { ID_REG, SWAN_XID_REG, TARO_XID_REG } from '@@/constants/regex';
 import { EventTarget } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
-import { consoleText, getExtraData, isTaro3 } from '@@/utils/tools';
+import { consoleText, getExtraData, isTaro3, niceTry } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
 import { isEmpty } from '@@/utils/glodash';
+import qs from 'querystringify';
 
 let ut;
 class GioEventAutoTracking {
@@ -200,6 +201,24 @@ class GioEventAutoTracking {
     });
   };
 
+  // 抖音小程序获取圈选地址
+  getCircleUrlByTT = ({ query }: any) => {
+    if (query.q && query.url) {
+      const urlFromQ = niceTry(
+        () => JSON.parse(query.q)?.gdpCircleRoomCollectUrl
+      );
+      if (urlFromQ) {
+        return urlFromQ;
+      } else {
+        return (
+          niceTry(
+            () => qs.parse(query.url.split('?')[1])?.gdpCircleRoomCollectUrl
+          ) ?? ''
+        );
+      }
+    }
+  };
+
   // 初始化圈选
   circleInit = (params: any) => {
     const { emitter } = this.growingIO;
@@ -207,10 +226,12 @@ class GioEventAutoTracking {
       params.referrerInfo?.extraData || params.query || {}
     );
     // 额外参数中存在gdpCircleRoomCollectUrl，则表示是圈选的跳转，进入圈选状态
-    if (extraData?.gdpCircleRoomCollectUrl) {
+    const gdpCircleRoomCollectUrl =
+      extraData?.gdpCircleRoomCollectUrl || this.getCircleUrlByTT(params);
+    if (gdpCircleRoomCollectUrl) {
       // 圈选初始化
-      if (this.circleServerUrl !== extraData?.gdpCircleRoomCollectUrl) {
-        this.circleServerUrl = extraData?.gdpCircleRoomCollectUrl;
+      if (this.circleServerUrl !== gdpCircleRoomCollectUrl) {
+        this.circleServerUrl = gdpCircleRoomCollectUrl;
         // 提前移除一次事件发送监听，防止重复监听
         emitter.off(EMIT_MSG.ON_SEND_AFTER, this.collectorSendFn);
         // 添加事件发送监听，用于发送圈选事件
@@ -282,6 +303,7 @@ class GioEventAutoTracking {
         }
       }
     });
+    console.log(requestData, '----->circleRequest');
   };
 }
 

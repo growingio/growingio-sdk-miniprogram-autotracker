@@ -1,6 +1,6 @@
 {
   "name": "gio-miniprogram-sdk",
-  "version": "4.4.1",
+  "version": "4.4.2",
   "description": "GrowngIO官方小程序 SDK，具备自动采集基本的用户行为事件，比如访问和行为数据等。目前支持微信小程序、支付宝小程序、百度小程序、字节(抖音头条)小程序、QQ小程序、淘宝小程序、京东小程序、快手小程序、快应用。",
   "author": "anyi@startdt.com",
   "license": "GNU General Public License v3.0",

@@ -9,7 +9,7 @@ import {
   niceTry,
   getDynamicAttributes,
   limitObject,
-  getLaunchQuery
+  getPureParams
 } from '@@/utils/tools';
 import { EVENT } from '@@/types/base';
 
@@ -70,17 +70,15 @@ class MinipPage implements MinipPageType {
       const pageParams = stackPage.options ?? stackPage.$taroParams;
       // 堆栈中有页面信息，则使用堆栈中的页面参数
       if (!isEmpty(pageParams)) {
-        // 删掉 taro 框架中自带的字段，删除圈选可能带进来的参数
-        unset(pageParams, ['$taroTimestamp', 'gdpCircleRoomCollectUrl']);
         // 有页面解析的 option 直接取
-        return this.qsQuery(pageParams);
+        return qsStringify(getPureParams(pageParams));
       } else if (!isEmpty(this.queryOptions[stackPath])) {
         // 没有 option 从 hook 获取的生命周期参数中取
-        return this.qsQuery(this.queryOptions[stackPath]);
+        return qsStringify(getPureParams(this.queryOptions[stackPath]));
       } else if (stackPath === enterParams.path) {
         // 某些小程序虽然有页面堆栈，但是页面还没加载完，兜底取启动参数
-        return this.qsQuery(
-          getLaunchQuery(
+        return qsStringify(
+          getPureParams(
             enterParams?.query,
             enterParams?.referrerInfo?.extraData
           )
@@ -88,8 +86,8 @@ class MinipPage implements MinipPageType {
       }
     } else if (enterParams.path) {
       // 堆栈中没有页面信息，但启动参数中有，说明是小程序刚启动还没加载页面，直接取启动参数
-      return this.qsQuery(
-        getLaunchQuery(enterParams?.query, enterParams?.referrerInfo?.extraData)
+      return qsStringify(
+        getPureParams(enterParams?.query, enterParams?.referrerInfo?.extraData)
       );
     } else {
       // 作为页面组件时 component created 生命周期中的埋点会取不到页面堆栈，所以拿最近的一个 page 事件中的页面信息做兜底
@@ -123,17 +121,6 @@ class MinipPage implements MinipPageType {
     } else {
       return title;
     }
-  };
-
-  /**
-   * 格式化页面参数为 query string
-   * 会去除 wxShoppingListScene 字段
-   * @param query 页面参数对象
-   */
-  qsQuery = (query = {}) => {
-    const slimQuery = { ...query };
-    unset(slimQuery, 'wxShoppingListScene');
-    return qsStringify(slimQuery);
   };
 
   /**

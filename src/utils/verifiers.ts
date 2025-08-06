@@ -27,7 +27,7 @@ export const initialCheck = (growingIO: GrowingIOType, args: any) => {
   const userOptions = (args.length === 4 ? args[3] : args[2]) || {};
   if (!projectId || !dataSourceId) {
     consoleText(
-      'SDK初始化失败，请使用 gdp("init", "您的GrowingIO项目 accountId", "您项目的 dataSourceId", "您的小程序 AppId（可选）", options: { host: "您的数据上报地址host" }); 进行初始化!',
+      'SDK初始化失败，请使用 gdp("init", "您的GrowingIO项目 accountId", "您项目的 dataSourceId", "您的小程序 AppId（可选）", options: { serverUrl: "您的数据上报地址" }); 进行初始化!',
       'error'
     );
     return false;

@@ -85,7 +85,6 @@ export interface MinipPageType {
   getPagePath: () => string;
   getPageQuery: () => string;
   getPageTitle: (trackingId?: string) => string;
-  qsQuery: (query: any) => string;
   getReferralPage: (trackingId: string) => string;
   buildShareQuery: (result: PageShareResult) => [string, string];
   updateShareResult: (

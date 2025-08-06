@@ -1,7 +1,7 @@
 import { AppHookLifeCircle } from '@@/types/eventHooks';
 import { GrowingIOType } from '@@/types/growingIO';
 import { isEmpty, typeOf, unset } from '@@/utils/glodash';
-import { getLaunchQuery, qsStringify } from '@@/utils/tools';
+import { getPureParams, qsStringify } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
 
 class AppEffects {
@@ -118,8 +118,10 @@ class AppEffects {
       gioPlatform !== 'quickapp' &&
       minipInstance.minip.canIUse('getEnterOptionsSync')
     ) {
-      const { path, query, scene, referrerInfo } =
-        minipInstance.minip.getEnterOptionsSync() || {};
+      const enterOptions = minipInstance.minip.getEnterOptionsSync() || {};
+      const { path, query, scene } = enterOptions;
+      const referrerInfo =
+        enterOptions.referrerInfo || enterOptions.refererInfo; // tt里取值是refererInfo
       rPath = path || args.path;
       rQuery = query || args.query;
       rAppId = referrerInfo?.appId || args?.referrerInfo?.appId || '';
@@ -127,11 +129,9 @@ class AppEffects {
       // 移除某些小程序圈选时我们带入的圈选地址参数
       unset(query, 'gdpCircleRoomCollectUrl');
       // 来源有额外参数时并入页面参数
-      if (!isEmpty(referrerInfo?.extraData)) {
-        rQuery = qsStringify(getLaunchQuery(rQuery, referrerInfo.extraData));
-      } else {
-        rQuery = qsStringify(rQuery);
-      }
+      rQuery = qsStringify(
+        getPureParams(rQuery, referrerInfo?.extraData || {})
+      );
     } else {
       // 不支持的按老逻辑兜底
       const { path, query, referrerInfo } = args;

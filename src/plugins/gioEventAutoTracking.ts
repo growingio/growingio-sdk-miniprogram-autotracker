@@ -203,7 +203,7 @@ class GioEventAutoTracking {
 
   // 抖音小程序获取圈选地址
   getCircleUrlByTT = ({ query }: any) => {
-    if (query.q && query.url) {
+    if (query && query.q && query.url) {
       const urlFromQ = niceTry(
         () => JSON.parse(query.q)?.gdpCircleRoomCollectUrl
       );

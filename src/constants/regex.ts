@@ -2,7 +2,7 @@ export const IPReg =
   /^((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})(\.((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})){3}/i;
 export const URLReg =
   /^(https?:\/\/)|(([a-zA-Z0-9_-])+(\.)?)*(:\d+)?(\/((\.)?(\?)?=?&?[a-zA-Z0-9_-](\?)?)*)*$/i;
-export const UNIAPP_FUNC_REG = /^e[0-9]+$/;
+export const UNIAPP_FUNC_REG = /^e[0-9]+(_[0-9]+)?$/;
 export const ABTEST_SIGN_REG = /^\d+_gdp_abt_sign$/;
 export const ABTEST_DATA_REG = /^\d+_gdp_abtd$/;
 export const ID_REG = /^\d{1,10}$/;

@@ -226,8 +226,13 @@ export const hasOwnProperty = Object.prototype.hasOwnProperty;
  * @param key string
  * @returns boolean
  */
-export const has = (o: object, key: string): boolean =>
-  !isNil(o) && hasOwnProperty.call(o, key);
+export const has = (o: object, key: string): boolean => {
+  // 增加类型检查，防止o为基本类型（如1）时，hasOwnProperty调用触发报错
+  // 尤其是在uni-app环境中，vendor.js可能会重写hasOwnProperty
+  if (o === null || typeof o === 'undefined') return false;
+  if (typeof o !== 'object' && typeof o !== 'function') return false;
+  return hasOwnProperty.call(o, key);
+};
 
 /**
  * 获取对象中所有的属性名

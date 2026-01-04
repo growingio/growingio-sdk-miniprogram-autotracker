@@ -48,7 +48,11 @@ class EventContextBuilder {
       language: language,
       latitude: locationData?.latitude,
       longitude: locationData?.longitude,
-      networkState: network?.networkType || network?.type || network?.subtype,
+      networkState:
+        network?.networkType?.result ||
+        network?.networkType ||
+        network?.type ||
+        network?.subtype,
       operatingSystem: getOS(platform, platformConfig.name),
       path: pagePath, // 如果页面中的path取不到，说明页面没初始化
       platform: platformConfig.platform,

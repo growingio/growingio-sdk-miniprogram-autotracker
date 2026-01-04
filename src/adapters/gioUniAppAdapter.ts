@@ -4,6 +4,7 @@
  */
 import { UNIAPP_FUNC_REG } from '@@/constants/regex';
 import { GrowingIOType } from '@@/types/growingIO';
+import { isFunction } from '@@/utils/glodash';
 
 const ONCE = '~'; // 用于标记一次性事件
 const CUSTOM = '^'; // 用于标记自定义事件
@@ -342,15 +343,6 @@ class GioUniAppAdapter {
       return;
     }
 
-    // 保存exposed供<script setup>写法的事件查找真实的事件名
-    const exposedKeys = ut.keys(exposed);
-    exposedKeys.forEach((k) => {
-      if (ut.isFunction(exposed[k])) {
-        // 建立函数名到暴露属性名的映射
-        this.exposedNames[exposed[k].name] = k;
-      }
-    });
-
     // 获取编译后的方法列表
     // 使用正则匹配UniApp编译生成的方法名
     const methodKeys = ut
@@ -361,19 +353,17 @@ class GioUniAppAdapter {
 
     // 遍历方法进行代理
     methodKeys.forEach((k, i) => {
-      const originFunc = instance.$scope[k].value;
-
+      const originFunc = instance.$scope[k]?.value;
       // 在updated中避免重复hook，通过_GIO_HOOKED_标记判断
-      if (instance._.updated && originFunc._GIO_HOOKED_) {
+      if (
+        !isFunction(originFunc) ||
+        (originFunc && instance._.updated && originFunc._GIO_HOOKED_)
+      ) {
         return;
       }
 
       // 获取自定义方法名
-      const customName = this.splicingMethodName(
-        originFunc.name,
-        k,
-        exposedKeys[i]
-      );
+      const customName = this.splicingMethodName(k, originFunc.name);
 
       // 使用customFcEffects包装方法
       instance.$scope[k].value = eventHooks.customFcEffects(
@@ -410,21 +400,12 @@ class GioUniAppAdapter {
    * @param exposedName 暴露的名称
    * @returns 最终使用的方法名
    */
-  splicingMethodName = (
-    originName: string,
-    traversalName: string,
-    exposedName: string
-  ): string => {
+  splicingMethodName = (traversalName: string, originName: string): string => {
     if (originName) {
-      // 优先使用原始名称
-      return originName;
-    } else if (exposedName) {
       // 其次使用遍历名称和暴露名称的组合
-      return `${traversalName}#${exposedName}`;
-    } else {
-      // 最后使用遍历名称
-      return traversalName;
+      return `${traversalName}#${originName}`;
     }
+    return traversalName;
   };
 }
 

@@ -1,58 +1,73 @@
-# 监听创建tag的事件，tag必须是CDP/Saas-vXXX的格式（同时兼容原vXXX格式，可按需调整）
-# 会自动进行发版到npm，同时创建一个release包
+# 监听创建tag的事件，匹配 CDP-vXXX、Saas-vXXX、vXXX 格式
+# 自动发布到 npm + 创建 GitHub Release
 name: Publish And Release
 
 on:
   push:
     tags:
-      # 匹配 CDP-vXXX、Saas-vXXX、vXXX 格式的tag（满足你的格式要求）
       - 'CDP-v*'
       - 'Saas-v*'
       - 'v*'
 
 jobs:
+  # npm 发布任务
   publish:
-    name: Auto Publish npm
+    name: Auto Publish to npm
     runs-on: ubuntu-latest
+    # Trusted Publisher 必需权限：OIDC 认证 + 读取仓库内容
     permissions:
-      # Trusted Publisher 必需：授予OIDC认证所需的id-token权限
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4 # 升级最新版，更稳定
-      - uses: actions/setup-node@v4 # 升级最新版
-        with:
-          node-version: 16 # 保留你的Node 16版本（可按需升级为18/20）
-          registry-url: https://registry.npmjs.org/
-      - name: Build
-        run: |
-          rm -rf dist || true  # 兼容dist目录不存在的情况，避免报错
-          npm install
-          npm run build
-      # 关键：使用npm官方publish动作，基于OIDC自动认证（Trusted Publisher核心）
-      - name: Publish to npm
-        uses: npm/publish@v2
-        with:
-          tag: latest
-          access: public
-          verbose: true
+      # 1. 拉取仓库代码
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-  release:
-    name: Auto Create Release
-    runs-on: ubuntu-latest
-    needs: publish # 依赖publish任务执行成功后再执行
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # 2. 配置 Node 环境
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 16 # 统一Node版本（原12版本过旧，建议升级，避免兼容性问题）
+          node-version: 16
           registry-url: https://registry.npmjs.org/
-      - name: Create Release
+
+      # 3. 项目构建（兼容 dist 目录不存在的情况）
+      - name: Install Dependencies & Build Project
+        run: |
+          rm -rf dist || true
+          npm install --registry=https://registry.npmmirror.com/  # 国内源加速安装（可删除该行使用官方源）
+          npm run build
+
+      # 4. 核心：通过 OIDC 自动认证（Trusted Publisher），执行 npm 发布
+      - name: Publish to npm Registry
+        run: npm publish --tag latest --non-interactive --access public --verbose
+        env:
+          # 无需手动配置 Token，GitHub OIDC 自动与 npm 可信发布者关联认证
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }} # 仅占位，实际由 OIDC 自动填充
+
+  # GitHub Release 创建任务（依赖 publish 任务执行成功）
+  release:
+    name: Auto Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: publish
+    steps:
+      # 1. 拉取仓库代码
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. 配置 Node 环境（统一版本，避免兼容问题）
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 16
+          registry-url: https://registry.npmjs.org/
+
+      # 3. 创建 Release 包
+      - name: Create Official Release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub 内置 Token，无需手动配置
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }} # 优化：ref_name 直接获取tag名称，更简洁
+          release_name: Release ${{ github.ref_name }} # 直接获取 Tag 名称（如 v1.0.0）
           draft: false
           prerelease: false

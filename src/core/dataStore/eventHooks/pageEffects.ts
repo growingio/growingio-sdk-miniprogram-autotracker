@@ -10,6 +10,12 @@ class PageEffects {
     this.prevEvent = {};
   }
 
+  /**
+   * Page 生命周期处理主函数
+   * @param {any} page - 页面实例
+   * @param {string} event - 生命周期事件名
+   * @param {any} args - 参数
+   */
   main = (page: any, event: PageHookLifeCircle, args: any) => {
     const eventTime = Date.now();
     const {
@@ -162,7 +168,11 @@ class PageEffects {
     }
   };
 
-  // 构建页面访问事件
+  /**
+   * 构建页面访问事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} [props] - 属性
+   */
   buildPageEvent = (trackingId: string, props?: any) => {
     const {
       dataStore: {

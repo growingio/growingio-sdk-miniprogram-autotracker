@@ -53,7 +53,11 @@ class Uploader implements UploaderType {
     );
   }
 
-  // 生成上报地址
+  /**
+   * 生成上报地址
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - 上报 URL
+   */
   generateURL = (trackingId: string) => {
     const { serverUrl, projectId } =
       this.growingIO.dataStore.getTrackerVds(trackingId);
@@ -64,14 +68,25 @@ class Uploader implements UploaderType {
     }
   };
 
-  // 获取积压队列
+  /**
+   * 获取积压队列
+   * @param {string} trackingId - 实例 ID
+   * @returns {EXTEND_EVENT[]} - 积压队列
+   */
   getHoardingQueue = (trackingId: string) =>
     this.hoardingQueue[trackingId] ?? [];
 
-  // 获取请求队列
+  /**
+   * 获取请求队列
+   * @param {string} trackingId - 实例 ID
+   * @returns {EXTEND_EVENT[]} - 请求队列
+   */
   getRequestQueue = (trackingId: string) => this.requestQueue[trackingId] ?? [];
 
-  // 提交请求（将请求按队列进行管理）
+  /**
+   * 提交请求（将请求按队列进行管理）
+   * @param {EXTEND_EVENT} commitData - 提交的数据
+   */
   commitRequest = (commitData: EXTEND_EVENT) => {
     const data: EXTEND_EVENT = { ...commitData };
     const { vdsConfig, emitter } = this.growingIO;
@@ -94,7 +109,11 @@ class Uploader implements UploaderType {
     }
   };
 
-  // 发起请求
+  /**
+   * 发起请求
+   * @param {string} trackingId - 实例 ID
+   * @param {boolean} [forceSend] - 是否强制发送
+   */
   initiateRequest = (trackingId: string, forceSend?: boolean) => {
     const { plugins, vdsConfig, minipInstance, dataStore } = this.growingIO;
     const hoardingQueue = this.getHoardingQueue(trackingId);
@@ -138,7 +157,10 @@ class Uploader implements UploaderType {
     }
   };
 
-  // 批量发送无延时(强制发送)
+  /**
+   * 批量发送无延时(强制发送)
+   * @param {string} trackingId - 实例 ID
+   */
   batchInvoke = (trackingId: string) => {
     const { vdsConfig, emitter } = this.growingIO;
     const hoardingQueue = this.getHoardingQueue(trackingId);
@@ -186,7 +208,11 @@ class Uploader implements UploaderType {
     });
   };
 
-  // 发送事件
+  /**
+   * 发送事件
+   * @param {EXTEND_EVENT[]} eventsQueue - 事件队列
+   * @param {EVENT[]} requestData - 请求数据
+   */
   sendEvent = (eventsQueue: EXTEND_EVENT[], requestData: EVENT[]) => {
     const trackingId = head(eventsQueue).trackingId;
     const { minipInstance, dataStore, emitter, plugins } = this.growingIO;
@@ -242,7 +268,10 @@ class Uploader implements UploaderType {
     });
   };
 
-  // 请求失败的回调
+  /**
+   * 请求失败的回调
+   * @param {EXTEND_EVENT} event - 失败的事件
+   */
   requestFailFn = (event: EXTEND_EVENT) => {
     // 把重试的请求进行计数，超过重试上限的会被丢弃
     if (!this.retryIds[event.requestId]) {

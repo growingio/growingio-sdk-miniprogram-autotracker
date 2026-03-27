@@ -8,6 +8,11 @@ class AppEffects {
   public enterParams: any = {};
   constructor(public growingIO: GrowingIOType) {}
 
+  /**
+   * App 生命周期处理主函数
+   * @param {string} event - 生命周期事件名
+   * @param {any} args - 参数
+   */
   main = (event: AppHookLifeCircle, args: any) => {
     const eventTime = Date.now();
     const {
@@ -107,7 +112,11 @@ class AppEffects {
     }
   };
 
-  // 进入小程序时的相关数据处理
+  /**
+   * 进入小程序时的相关数据处理
+   * @param {any} [args={}] - 参数
+   * @returns {object} - 处理后的参数
+   */
   enterParamsParse = (args: any = {}) => {
     const { gioPlatform, minipInstance, dataStore } = this.growingIO;
     let rPath = ''; // 进入小程序时的path
@@ -143,16 +152,16 @@ class AppEffects {
     return { path: rPath, query: rQuery, referralPage: rAppId };
   };
 
-  // 获取来源场景值
   /**
+   * 获取来源场景值
    * wx：https://developers.weixin.qq.com/miniprogram/dev/reference/scene-list.html
    * alipay：https://opendocs.alipay.com/mini/framework/scene
    * swan：https://smartprogram.baidu.com/docs/data/host_scene/
    * tt：https://microapp.bytedance.com/docs/zh-CN/mini-app/develop/framework/scene-value/
    * qq：https://q.qq.com/wiki/develop/game/frame/scene/
    * quickapp：https://doc.quickapp.cn/features/system/app.html?h=%E6%9D%A5%E6%BA%90
+   * @param {any} args - 参数
    */
-
   parseScene = (args) => {
     const { minipInstance, gioPlatform, dataStore } = this.growingIO;
     let newScene;
@@ -172,7 +181,11 @@ class AppEffects {
     dataStore.scene = newScene;
   };
 
-  // 构建访问事件
+  /**
+   * 构建访问事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} [props] - 属性
+   */
   buildVisitEvent = (trackingId: string, props?: any) => {
     const {
       dataStore: { getOriginalSource, eventContextBuilder, eventInterceptor },
@@ -202,7 +215,10 @@ class AppEffects {
     eventInterceptor(event);
   };
 
-  // 构建关闭事件
+  /**
+   * 构建关闭事件
+   * @param {string} trackingId - 实例 ID
+   */
   buildCloseEvent = (trackingId: string) => {
     const {
       dataStore: { eventContextBuilder, eventInterceptor }

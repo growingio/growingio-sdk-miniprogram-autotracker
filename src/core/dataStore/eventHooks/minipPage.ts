@@ -37,6 +37,7 @@ class MinipPage implements MinipPageType {
    * 获取当前页面路径
    * 优先级：页面堆栈路径 > 启动参数路径 > 最近 page 事件路径 > 最近 visit 事件路径
    * 插件环境下无页面时返回插件 appId
+   * @returns {string} - 页面路径
    */
   getPagePath = () => {
     const { minipInstance, inPlugin, dataStore, trackingId } = this.growingIO;
@@ -60,6 +61,7 @@ class MinipPage implements MinipPageType {
   /**
    * 获取当前页面参数（query）
    * 优先级：页面堆栈参数 > 生命周期参数 > 启动参数 > 最近 page 事件参数 > 最近 visit 事件参数
+   * @returns {string} - 页面参数字符串
    */
   getPageQuery = () => {
     const { minipInstance, dataStore, trackingId } = this.growingIO;
@@ -102,7 +104,8 @@ class MinipPage implements MinipPageType {
    * 获取页面标题
    * 优先级：setNavigationBarTitle > data.gioPageTitle > config.js 中设置的值 > tabBar 配置
    * 插件环境下无页面时返回插件 appId
-   * @param trackingId 可选，追踪 id
+   * @param {string} [trackingId] - 可选，追踪 id
+   * @returns {string} - 页面标题
    */
   getPageTitle = (trackingId?: string) => {
     const { minipInstance, inPlugin, dataStore } = this.growingIO;
@@ -126,7 +129,8 @@ class MinipPage implements MinipPageType {
   /**
    * 获取页面来源（referrer）
    * 优先级：最近 page 事件路径 > 启动参数 referrerInfo.appId > scene 场景值
-   * @param trackingId 追踪 id
+   * @param {string} trackingId - 追踪 id
+   * @returns {string} - 页面来源
    */
   getReferralPage = (trackingId: string) => {
     const {
@@ -143,8 +147,8 @@ class MinipPage implements MinipPageType {
   /**
    * 处理分享参数，生成分享用的 path 和 query
    * 优先级：result.query > result.path > 当前页面参数（去除 utm_ 开头参数）
-   * @param result PageShareResult 客户自定义的参数
-   * @returns [path, queryString]
+   * @param {PageShareResult} result - 客户自定义的参数
+   * @returns {[string, string]} - [path, queryString]
    */
   buildShareQuery(result: PageShareResult): [string, string] {
     // 自定义 path 的地址参数截取（onShareAppMessage 中的页面参数是拼在地址中的）
@@ -181,9 +185,9 @@ class MinipPage implements MinipPageType {
 
   /**
    * 更新分享结果，补全参数
-   * @param result PageShareResult 分享参数对象
-   * @param fillParams 是否补全参数，默认 true
-   * @returns 更新后的 result
+   * @param {PageShareResult} result - 分享参数对象
+   * @param {boolean} [fillParams=true] - 是否补全参数，默认 true
+   * @returns {PageShareResult} - 更新后的 result
    */
   updateShareResult = (result: PageShareResult, fillParams = true) => {
     const [path, queryString] = this.buildShareQuery(result);
@@ -198,9 +202,9 @@ class MinipPage implements MinipPageType {
 
   /**
    * 给事件合并页面属性
-   * @param trackingId 追踪 id
-   * @param event 事件对象
-   * @returns 合并后的属性对象
+   * @param {string} trackingId - 追踪 id
+   * @param {EVENT} event - 事件对象
+   * @returns {any} - 合并后的属性对象
    */
   eventSetPageProps = (trackingId: string, event: EVENT) => {
     const pageProps = niceTry(

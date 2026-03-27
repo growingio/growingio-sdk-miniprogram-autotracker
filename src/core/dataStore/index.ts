@@ -13,7 +13,6 @@ import {
   isBoolean,
   isEmpty,
   isFunction,
-  isString,
   keys,
   typeOf,
   unset
@@ -163,7 +162,12 @@ class DataStore implements DataStoreType {
     );
   }
 
-  // 获取存储key
+  /**
+   * 获取存储key
+   * @param {string} trackingId - 实例 ID
+   * @param {StorageKeyType} name - 存储键名
+   * @returns {string} - 完整的存储键
+   */
   getStorageKey = (trackingId: string, name: StorageKeyType) => {
     const { inPlugin } = this.growingIO;
     return `${trackingId === this.growingIO.trackingId ? '' : trackingId}${
@@ -171,6 +175,11 @@ class DataStore implements DataStoreType {
     }`;
   };
 
+  /**
+   * 获取 gsid (Global Sequence ID)
+   * @param {string} trackingId - 实例 ID
+   * @returns {number} - gsid 值
+   */
   // @ts-ignore
   getGsid = (trackingId: string) => {
     let gsid = Number(this._gsid[trackingId]);
@@ -182,6 +191,11 @@ class DataStore implements DataStoreType {
     }
   };
 
+  /**
+   * 设置 gsid
+   * @param {string} trackingId - 实例 ID
+   * @param {any} value - gsid 值
+   */
   // @ts-ignore
   setGsid = (trackingId: string, value: any) => {
     let gsid = Number(value);
@@ -195,10 +209,17 @@ class DataStore implements DataStoreType {
     }
   };
 
+  /**
+   * 获取场景值
+   */
   get scene() {
     return this._scene;
   }
 
+  /**
+   * 设置场景值
+   * @param {any} v - 场景值
+   */
   set scene(v: any) {
     const prevScene = this._scene;
     this._scene = v;
@@ -210,7 +231,10 @@ class DataStore implements DataStoreType {
     }
   }
 
-  // 初始化gsid
+  /**
+   * 初始化 gsid
+   * @param {string} trackingId - 实例 ID
+   */
   initStorageInfo = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
     const oriGsid = minipInstance.getStorageSync(
@@ -231,7 +255,9 @@ class DataStore implements DataStoreType {
     }
   };
 
-  // 在存储中同步gsid信息
+  /**
+   * 在存储中同步 gsid 信息
+   */
   saveStorageInfo = () => {
     const { minipInstance } = this.growingIO;
     this._stid = { ...this._gsid };
@@ -244,7 +270,11 @@ class DataStore implements DataStoreType {
     );
   };
 
-  // 保存初始来源信息
+  /**
+   * 保存初始来源信息
+   * @param {string} trackingId - 实例 ID
+   * @param {any} origins - 来源信息
+   */
   setOriginalSource = (trackingId: string, origins: any) => {
     const { minipInstance } = this.growingIO;
     minipInstance.setStorageSync(
@@ -253,7 +283,11 @@ class DataStore implements DataStoreType {
     );
   };
 
-  // 获取初始来源信息
+  /**
+   * 获取初始来源信息
+   * @param {string} trackingId - 实例 ID
+   * @returns {any} - 来源信息
+   */
   getOriginalSource = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
     return (
@@ -267,14 +301,24 @@ class DataStore implements DataStoreType {
     );
   };
 
-  // 获取采集实例配置内容 //? 多实例插件会重写该方法
+  /**
+   * 获取采集实例配置内容
+   * @param {string} trackingId - 实例 ID
+   * @returns {any} - 配置内容
+   */
+  // ? 多实例插件会重写该方法
   // eslint-disable-next-line
   getTrackerVds = (trackingId: string): any =>
     this.growingIO.trackingId === trackingId
       ? { ...this.growingIO.vdsConfig }
       : undefined;
 
-  // 初始化实例的配置项 // ?多实例插件会重写该方法
+  /**
+   * 初始化实例的配置项
+   * @param {any} options - 配置项
+   * @returns {any} - 初始化后的配置项
+   */
+  // ?多实例插件会重写该方法
   initTrackerOptions = (options: any) => {
     const trackerOptions = this.initOptions(options);
     trackerOptions.trackingId = options.trackingId;
@@ -283,10 +327,15 @@ class DataStore implements DataStoreType {
     return trackerOptions;
   };
 
-  // 初始化实例的hooker // ?多实例插件会重写该方法
+  /**
+   * 初始化实例的 hooker
+   * @param {OriginOptions} vdsConfig - 配置项
+   */
+  // ?多实例插件会重写该方法
   initTrackerHooker = (vdsConfig: OriginOptions) => {
     const { platformConfig, inPlugin, minipInstance, plugins } = this.growingIO;
-    const { uniVue, taro } = vdsConfig;
+    const { uniVue, taro, mpx } = vdsConfig;
+
     // 如果是使用全量版本时，当前小程序不是框架的，要允许原生的hook
     if (!(uniVue || taro || minipInstance.platform === 'quickapp')) {
       platformConfig.canHook = true;
@@ -298,17 +347,29 @@ class DataStore implements DataStoreType {
       this.eventHooks.initOriginalValue();
     }
     /** 第三方框架重写 */
-    // uniapp
-    if (uniVue) {
-      plugins?.gioUniAppAdapter?.main();
-    }
-    // taro
-    if (taro) {
-      plugins?.gioTaroAdapter?.main();
+    try {
+      // uniapp
+      if (uniVue) {
+        plugins?.gioUniAppAdapter?.main();
+      }
+      // taro
+      if (taro) {
+        plugins?.gioTaroAdapter?.main();
+      }
+      // mpx
+      if (mpx) {
+        plugins?.gioMpxAdapter?.main();
+      }
+    } catch (error) {
+      consoleText(error, 'error');
     }
   };
 
-  // 初始化全局配置
+  /**
+   * 初始化全局配置
+   * @param {OriginOptions} userOptions - 用户配置
+   * @returns {any} - 初始化后的全局配置
+   */
   initOptions = (userOptions: OriginOptions) => {
     const { projectId, dataSourceId, appId, trackingId } = userOptions;
     const configs: any = {};
@@ -396,31 +457,38 @@ class DataStore implements DataStoreType {
     };
   };
 
-  // 全局配置修改
+  /**
+   * 全局配置修改
+   * @param {string} trackingId - 实例 ID
+   * @param {string} k - 配置键名
+   * @param {any} v - 配置值
+   * @returns {boolean} - 是否修改成功
+   */
   setOption = (trackingId: string, k: string, v: any) => {
     const { userStore, emitter } = this.growingIO;
     const trackerVds = this.getTrackerVds(trackingId);
-    // 检查 k
-    const validKey = isString(k) && this.ALLOW_SETTING_KEYS.includes(k);
-    const validValue = validKey && typeof v === DEFAULT_SETTINGS[k]?.type;
-    if (validKey && validValue) {
-      const prevConfig = { ...trackerVds };
-      this.updateVdsConfig(trackingId, { ...trackerVds, [k]: v });
-      // 从关闭到打开dataCollect时补发visit和page
-      if (k === 'dataCollect' && prevConfig.dataCollect !== v && v) {
-        // 更新session
-        userStore.setSessionId(trackingId);
-      }
-      // 配置项有变更要全局广播
-      emitter.emit(EMIT_MSG.OPTION_CHANGE, { optionName: k, optionValue: v });
-      return true;
-    } else {
-      callError(`setOption > ${k}`);
-      return false;
+    const prevConfig = { ...trackerVds };
+    // 对 ignoreFields 进行过滤，只允许 IGNORE_PARAMS 中的字段
+    if (k === 'ignoreFields') {
+      v = v.filter((o: string) => IGNORE_PARAMS.includes(o));
     }
+    this.updateVdsConfig(trackingId, { ...trackerVds, [k]: v });
+    // 从关闭到打开dataCollect时补发visit和page
+    if (k === 'dataCollect' && prevConfig.dataCollect !== v && v) {
+      // 更新session
+      userStore.setSessionId(trackingId);
+    }
+    // 配置项有变更要全局广播
+    emitter.emit(EMIT_MSG.OPTION_CHANGE, { optionName: k, optionValue: v });
+    return true;
   };
 
-  // 获取全局配置
+  /**
+   * 获取全局配置
+   * @param {string} trackingId - 实例 ID
+   * @param {string} [k] - 配置键名
+   * @returns {any} - 配置值
+   */
   getOption = (trackingId: string, k?: string) => {
     const trackerVds = this.getTrackerVds(trackingId);
     if (k && has(this.growingIO.vdsConfig, k)) {
@@ -437,7 +505,11 @@ class DataStore implements DataStoreType {
     }
   };
 
-  // 根据实例更新内存和存储中的vds配置项值
+  /**
+   * 根据实例更新内存和存储中的 vds 配置项值
+   * @param {string} trackingId - 实例 ID
+   * @param {any} vds - 配置项
+   */
   updateVdsConfig = (trackingId: string, vds: any) => {
     if (trackingId === this.growingIO.trackingId) {
       this.growingIO.vdsConfig = { ...this.growingIO.vdsConfig, ...vds };
@@ -452,7 +524,10 @@ class DataStore implements DataStoreType {
     }
   };
 
-  // 修改分享跳出判断值
+  /**
+   * 修改分享跳出判断值
+   * @param {boolean} [v] - 设置的值
+   */
   toggleShareOut = (v?: boolean) => {
     if (isBoolean(v)) {
       this.shareOut = v;
@@ -461,17 +536,28 @@ class DataStore implements DataStoreType {
     }
   };
 
-  // 手动调用visit事件的方法
+  /**
+   * 手动调用 visit 事件的方法
+   * @param {string} trackingId - 实例 ID
+   * @param {any} [props] - 属性
+   */
   sendVisit = (trackingId: string, props?: any) => {
     (this.eventHooks.appEffects as any).buildVisitEvent(trackingId, props);
   };
 
-  // 手动调用page事件的方法
+  /**
+   * 手动调用 page 事件的方法
+   * @param {string} trackingId - 实例 ID
+   * @param {any} [props] - 属性
+   */
   sendPage = (trackingId: string, props?: any) => {
     (this.eventHooks.pageEffects as any).buildPageEvent(trackingId, props);
   };
 
-  // 事件的格式转换(同时移除无值的字段)
+  /**
+   * 事件的格式转换(同时移除无值的字段)
+   * @param {EXTEND_EVENT} event - 事件对象
+   */
   eventConverter = (event: EXTEND_EVENT) => {
     const { dataStore, uploader } = this.growingIO;
     const { dataCollect } = this.getTrackerVds(event.trackingId);
@@ -511,7 +597,11 @@ class DataStore implements DataStoreType {
     }
   };
 
-  // 事件重组
+  /**
+   * 事件重组
+   * @param {any} e - 原始事件
+   * @returns {any} - 重组后的事件
+   */
   eventRefactor = (e: any) => {
     // 有的事件的path和query不能再用页面的值，所以直接使用事件中已有的值
     const ne = {
@@ -531,7 +621,11 @@ class DataStore implements DataStoreType {
     return ne;
   };
 
-  // 事件拦截器（有的通用维度字段需要异步获取，为了防止事件在通用维度还没返回之前就发出去）一般只有最开始的个别事件会被拦住
+  /**
+   * 事件拦截器（有的通用维度字段需要异步获取，为了防止事件在通用维度还没返回之前就发出去）
+   * 一般只有最开始的个别事件会被拦住
+   * @param {any} event - 事件对象
+   */
   eventInterceptor = (event: any) => {
     const { systemInfo, network } = this.growingIO.minipInstance;
     if (isEmpty(systemInfo) || isEmpty(network)) {
@@ -549,7 +643,9 @@ class DataStore implements DataStoreType {
     }
   };
 
-  // 系统信息异步获取完后对拦截队列进行检查，防止事件被卡住
+  /**
+   * 系统信息异步获取完后对拦截队列进行检查，防止事件被卡住
+   */
   eventReleaseInspector = () => {
     const {
       minipInstance: { systemInfo, network }
@@ -562,7 +658,11 @@ class DataStore implements DataStoreType {
     }
   };
 
-  // 构建应用/页面转发分享事件
+  /**
+   * 构建应用/页面转发分享事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} args - 参数
+   */
   buildAppMessageEvent = (trackingId: string, args: any) => {
     const originResult = args[0];
     let updateResult;
@@ -592,7 +692,11 @@ class DataStore implements DataStoreType {
     eventInterceptor(event);
   };
 
-  // 构建朋友圈分享事件
+  /**
+   * 构建朋友圈分享事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} args - 参数
+   */
   buildTimelineEvent = (trackingId: string, args: any) => {
     const originResult = args[0];
     let updateResult;
@@ -621,7 +725,11 @@ class DataStore implements DataStoreType {
     eventInterceptor(event);
   };
 
-  // 构建添加收藏事件
+  /**
+   * 构建添加收藏事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} args - 参数
+   */
   buildAddFavorites = (trackingId: string, args: any) => {
     const originResult = args[0];
     let updateResult;
@@ -648,7 +756,10 @@ class DataStore implements DataStoreType {
     eventInterceptor(event);
   };
 
-  // 需要对所有trackingId执行的逻辑
+  /**
+   * 需要对所有 trackingId 执行的逻辑
+   * @param {Function} callback - 回调函数
+   */
   trackersExecute = (callback: (trackingId: string) => any) => {
     this.initializedTrackingIds.forEach((trackingId: string) => {
       if (typeOf(callback) === 'function') {

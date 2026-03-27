@@ -84,6 +84,7 @@ export class GioMultipleInstances {
           'forceLogin',
           'impressionScale',
           'keepAlive',
+          'mpx',
           'originalSource',
           'performance',
           'pluginMode',
@@ -110,11 +111,14 @@ export class GioMultipleInstances {
         options.trackingId,
         this.growingIO
       );
-      if (trackerType) {
-        const { platformConfig, inPlugin, minipInstance, plugins, dataStore } =
-          this.growingIO;
-        const { uniVue, taro } = options;
+      const { platformConfig, inPlugin, minipInstance, plugins, dataStore } =
+        this.growingIO;
+      const { uniVue, taro, mpx } = options;
+      // 注意：mpx的page重写依赖原生逻辑，需要设置canHook和执行initEventHooks
+      // uniapp和taro完全自己接管生命周期，不需要原生hook
+      if (trackerType || mpx) {
         // 如果是使用全量版本时，当前小程序不是框架的，要允许原生的hook
+        // uniapp和taro不需要原生hook，但mpx需要（因为mpx的page重写依赖原生逻辑）
         if (!(uniVue || taro)) {
           platformConfig.canHook = true;
         }
@@ -122,15 +126,19 @@ export class GioMultipleInstances {
         if (!inPlugin || ['tbp', 'jdp'].includes(minipInstance.platform)) {
           dataStore.eventHooks.initEventHooks();
         }
-        /** 第三方框架重写 */
-        // uniapp
-        if (uniVue) {
-          plugins?.gioUniAppAdapter?.main();
-        }
-        // taro
-        if (taro) {
-          plugins?.gioTaroAdapter?.main();
-        }
+      }
+      /** 第三方框架重写 - 每个实例都需要执行各自的框架适配 */
+      // uniapp
+      if (uniVue) {
+        plugins?.gioUniAppAdapter?.main();
+      }
+      // taro
+      if (taro) {
+        plugins?.gioTaroAdapter?.main();
+      }
+      // mpx
+      if (mpx) {
+        plugins?.gioMpxAdapter?.main();
       }
     };
 

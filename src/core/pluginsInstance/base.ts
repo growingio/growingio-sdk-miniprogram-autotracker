@@ -41,7 +41,9 @@ class BasePlugins implements PluginsType {
     );
   }
 
-  // 初始化内置插件，不允许客户自己热插拔的插件，内置打包完成
+  /**
+   * 初始化内置插件，不允许客户自己热插拔的插件，内置打包完成
+   */
   innerPluginInit = () => {
     EXTRA_PLUGINS.forEach((o) => unset(this.pluginsContext?.plugins, o));
     keys(this.pluginsContext?.plugins).forEach((key) => {
@@ -62,7 +64,13 @@ class BasePlugins implements PluginsType {
     }
   };
 
-  // 挂载插件
+  /**
+   * 挂载插件
+   * @param {string} pluginName - 插件名称
+   * @param {any} [pluginItem] - 插件项
+   * @param {any} [options] - 插件配置
+   * @returns {boolean} - 是否挂载成功
+   */
   install = (pluginName: string, pluginItem?: any, options?: any) => {
     const { emitter } = this.growingIO;
     const pluginTarget: PluginItem =
@@ -95,7 +103,10 @@ class BasePlugins implements PluginsType {
     }
   };
 
-  // 挂载所有插件
+  /**
+   * 挂载所有插件
+   * @param {PluginItem[]} [plugins] - 插件列表
+   */
   installAll = (plugins?: PluginItem[]) => {
     (plugins || this.pluginItems).forEach((o: PluginItem) => {
       const suc = this.install(
@@ -114,7 +125,11 @@ class BasePlugins implements PluginsType {
     });
   };
 
-  // 移除插件
+  /**
+   * 移除插件
+   * @param {string} pluginName - 插件名称
+   * @returns {boolean} - 是否移除成功
+   */
   uninstall = (pluginName: string) => {
     unset(this.pluginItems, pluginName);
     const u = unset(this.growingIO?.plugins, pluginName);
@@ -124,20 +139,31 @@ class BasePlugins implements PluginsType {
     return u as boolean;
   };
 
-  // 移除所有插件
+  /**
+   * 移除所有插件
+   */
   uninstallAll = () => {
     this.pluginItems.forEach((o: PluginItem) => this.uninstall(o.name));
   };
 
+  /**
+   * 插件执行错误处理
+   * @param {PluginItem} p - 插件项
+   * @param {any} e - 错误对象
+   */
   lifeError = (p: PluginItem, e: any) => {
     this.growingIO.emitter.emit(EMIT_MSG.ON_ERROR, {
       plugin: p,
       error: e
     });
-    consoleText(`插件执行错误 ${p.name} ${e}`, 'error');
+    consoleText(`插件执行错误 ${p?.name || 'unknown'} ${e}`, 'error');
   };
 
-  // 触发插件的生命周期事件
+  /**
+   * 触发插件的生命周期事件
+   * @param {string} lifetime - 生命周期名称
+   * @param {any} args - 参数
+   */
   callLifeCycle = (lifetime: string, args: any) => {
     this.pluginItems.forEach((o: PluginItem) => {
       const method = (this.growingIO.plugins as any)[o.name]

@@ -1,4 +1,6 @@
-// SDK系统的默认配置项
+/**
+ * SDK系统的默认配置项
+ */
 export const DEFAULT_SETTINGS = {
   // 是否开启无埋点
   autotrack: { type: 'boolean', default: true },
@@ -39,6 +41,8 @@ export const DEFAULT_SETTINGS = {
   taro: { type: ['object', 'module'], default: false },
   // taro框架vue实例
   taroVue: { type: ['object', 'function'], default: false },
+  // mpx框架实例
+  mpx: { type: ['module', 'function'], default: false },
   // 淘宝小程序/小部件配置
   tbConfig: {
     type: 'object',
@@ -61,14 +65,18 @@ export const DEFAULT_SETTINGS = {
   version: { type: 'string', default: '1.0.0' }
 };
 
-// 不管实例直接调用的方法
+/**
+ * 不管实例直接调用的方法
+ */
 export const DIRECT_HANDLERS = [
   'getPlugins', // 获取所有已加载插件
   'getDeviceId', // 获取设备id
   'updateImpression' // 手动更新曝光
 ];
 
-// 多实例的方法
+/**
+ * 多实例的方法
+ */
 export const INSTANCE_HANDLERS = [
   'clearGeneralProps', // 清除埋点通用属性
   'clearPageAttributes', // 清除页面属性
@@ -94,7 +102,9 @@ export const INSTANCE_HANDLERS = [
   'trackTimerStart' // 初始化事件计时器
 ];
 
-// 直接调用的通用方法
+/**
+ * 直接调用的通用方法
+ */
 export const HANDLERS = [
   'init', // 初始化SDK
   'registerPlugins', // 手动注册插件
@@ -102,15 +112,20 @@ export const HANDLERS = [
   ...INSTANCE_HANDLERS
 ];
 
-// 允许通过setOption修改的配置项
+/**
+ * 允许通过setOption修改的配置项
+ */
 export const ALLOW_SET_OPTIONS = {
   autotrack: '无埋点',
   dataCollect: '数据采集',
   debug: '调试模式',
-  serverUrl: '数据上报服务地址'
+  serverUrl: '数据上报服务地址',
+  ignoreFields: '忽略上报字段'
 };
 
-// 已废弃方法
+/**
+ * 已废弃方法
+ */
 export const DEPRECATED_HANDLERS = [
   'enableDebug', // 4.0废弃
   'setAutotrack', // 4.0废弃
@@ -123,7 +138,9 @@ export const DEPRECATED_HANDLERS = [
   'getLocation' // 2022/4/29废弃，原因：https://developers.weixin.qq.com/community/develop/doc/000e8ccb5ac498318cbd26c495bc01 ；https://developers.weixin.qq.com/miniprogram/dev/api/location/wx.getLocation.html
 ];
 
-// 允许忽略的上报字段
+/**
+ * 允许忽略的上报字段
+ */
 export const IGNORE_PARAMS = [
   'deviceBrand',
   'deviceModel',
@@ -134,7 +151,9 @@ export const IGNORE_PARAMS = [
   'operatingSystem'
 ];
 
-// 额外打通的字段
+/**
+ * 额外打通的字段
+ */
 export const EXTRA_INFO_PARAMS: string[] = [
   ...IGNORE_PARAMS,
   'appChannel',
@@ -142,7 +161,9 @@ export const EXTRA_INFO_PARAMS: string[] = [
   'platformVersion'
 ];
 
-// 小程序平台
+/**
+ * 小程序平台
+ */
 export const PLATFORMTYPES = [
   'wx',
   'my',
@@ -155,7 +176,9 @@ export const PLATFORMTYPES = [
   'quickapp'
 ];
 
-// 各个需要拼接的在存储中的key后缀
+/**
+ * 各个需要拼接的在存储中的key后缀
+ */
 export const STORAGE_KEYS: any = {
   gsid: '_growing_gsid_',
   originalSource: '_gdp_original_source_',

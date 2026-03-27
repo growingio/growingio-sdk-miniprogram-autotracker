@@ -7,9 +7,9 @@ import { isNumber, isString, toString } from '@@/utils/glodash';
 
 /**
  * 一些id的合法性校验
- * @param id // 只允许数字和字符串，不允许为空字符串、0、负数、短横线字符串null,undefined
+ * @param {string | number} o - 只允许数字和字符串，不允许为空字符串、0、负数、短横线字符串null,undefined
+ * @returns {boolean} - 校验结果
  */
-
 export const verifyId = (o: string | number) =>
   ((isString(o) && (o as string).length > 0) ||
     (isNumber(o) && (o as number) > 0)) &&
@@ -17,8 +17,10 @@ export const verifyId = (o: string | number) =>
 
 /**
  * 初始化时的一些合法性校验
+ * @param {GrowingIOType} growingIO - GrowingIO 实例
+ * @param {any} args - 初始化参数
+ * @returns {object | boolean} - 校验通过返回初始化配置对象，否则返回 false
  */
-
 export const initialCheck = (growingIO: GrowingIOType, args: any) => {
   // ?重复初始化由init方法内部判断
   const projectId = toString(args[0]);

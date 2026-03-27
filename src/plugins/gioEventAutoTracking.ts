@@ -23,6 +23,11 @@ class GioEventAutoTracking {
     this.listenForLunchEvent();
   }
 
+  /**
+   * 插件入口方法
+   * @param {EventTarget} e - 事件对象
+   * @param {string} eventName - 事件名称
+   */
   main = (e: EventTarget, eventName: string) => {
     const {
       vdsConfig,
@@ -75,7 +80,12 @@ class GioEventAutoTracking {
     }
   };
 
-  // 获取触发节点xpath信息
+  /**
+   * 获取触发节点 xpath 信息
+   * @param {EventTarget} e - 事件对象
+   * @param {string} eventName - 事件名称
+   * @returns {string} - xpath 字符串
+   */
   getNodeXpath = (e: EventTarget, eventName: string) => {
     const { gioPlatform, vdsConfig } = this.growingIO;
     const target = e.currentTarget || e.target;
@@ -90,7 +100,12 @@ class GioEventAutoTracking {
     return `${id}#${eventName}`;
   };
 
-  // 构建点击事件
+  /**
+   * 构建点击事件
+   * @param {string} trackingId - 实例 ID
+   * @param {EventTarget} e - 事件对象
+   * @param {string} eventName - 事件名称
+   */
   buildClickEvent = (trackingId: string, e: EventTarget, eventName: string) => {
     const xpath = this.getNodeXpath(e, eventName);
     if (xpath) {
@@ -131,7 +146,11 @@ class GioEventAutoTracking {
     }
   };
 
-  // 构建tab菜单点击事件
+  /**
+   * 构建 tab 菜单点击事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} tabItem - tab 项信息
+   */
   buildTabClickEvent = (trackingId: string, tabItem: any) => {
     const {
       dataStore: { eventContextBuilder, eventInterceptor, eventHooks }
@@ -156,7 +175,12 @@ class GioEventAutoTracking {
     eventInterceptor(event);
   };
 
-  // 构建表单变化事件
+  /**
+   * 构建表单变化事件
+   * @param {string} trackingId - 实例 ID
+   * @param {EventTarget} e - 事件对象
+   * @param {string} eventName - 事件名称
+   */
   buildChangeEvent = (
     trackingId: string,
     e: EventTarget,
@@ -191,7 +215,9 @@ class GioEventAutoTracking {
 
   // --------------------- 以下内容是对新版小程序圈选的支持 ---------------------
 
-  // 监听小程序的onLunch事件
+  /**
+   * 监听小程序的 onLunch 事件
+   */
   listenForLunchEvent = () => {
     const { emitter } = this.growingIO;
     emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event, params }) => {
@@ -201,7 +227,11 @@ class GioEventAutoTracking {
     });
   };
 
-  // 抖音小程序获取圈选地址
+  /**
+   * 抖音小程序获取圈选地址
+   * @param {any} param0 - 参数对象
+   * @returns {string} - 圈选地址
+   */
   getCircleUrlByTT = ({ query }: any) => {
     if (query && query.q && query.url) {
       const urlFromQ = niceTry(
@@ -219,7 +249,10 @@ class GioEventAutoTracking {
     }
   };
 
-  // 初始化圈选
+  /**
+   * 初始化圈选
+   * @param {any} params - 启动参数
+   */
   circleInit = (params: any) => {
     const { emitter } = this.growingIO;
     const extraData = getExtraData(
@@ -242,7 +275,10 @@ class GioEventAutoTracking {
     }
   };
 
-  // 数据采集发送监听回调
+  /**
+   * 数据采集发送监听回调
+   * @param {any} param0 - 发送数据
+   */
   collectorSendFn = ({ requestData, trackingId }) => {
     const { uploader } = this.growingIO;
     if (this.circleOpen) {
@@ -269,14 +305,20 @@ class GioEventAutoTracking {
     }
   };
 
-  // 圈选结束
+  /**
+   * 圈选结束
+   */
   circleClose = () => {
     this.circleOpen = false;
     this.circleServerUrl = '';
     this.growingIO.emitter.off(EMIT_MSG.ON_SEND_AFTER, this.collectorSendFn);
   };
 
-  // 展示圈选提示
+  /**
+   * 展示圈选提示
+   * @param {'enter' | 'error'} type - 提示类型
+   * @param {string} [msg] - 错误信息
+   */
   showPromptModal = (type: 'enter' | 'error', msg?: string) => {
     this.growingIO.minipInstance.minip.showModal({
       title: 'GrowingIO提示',
@@ -285,7 +327,10 @@ class GioEventAutoTracking {
     });
   };
 
-  // 发起圈选请求
+  /**
+   * 发起圈选请求
+   * @param {any} requestData - 请求数据
+   */
   circleRequest = (requestData: any) => {
     const { minipInstance } = this.growingIO;
     minipInstance.request({

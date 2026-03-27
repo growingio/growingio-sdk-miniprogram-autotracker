@@ -37,11 +37,17 @@ class UserStore implements UserStoreType {
     this._sessionExpires = -1;
   }
 
-  // 获取sessionId存储key
+  /**
+   * 获取sessionId存储key
+   * @returns {string} - sessionId 存储 key
+   */
   _getUidKey = () =>
     this.growingIO.inPlugin ? '_growing_plugin_uid_' : '_growing_uid_';
 
-  // 获取设备Id
+  /**
+   * 获取设备Id
+   * @returns {string} - 设备 ID
+   */
   getUid = () => {
     const { minipInstance } = this.growingIO;
     // 内存中拿不到尝试从存储中拿
@@ -55,7 +61,10 @@ class UserStore implements UserStoreType {
     return this._uid;
   };
 
-  // 设置设备Id
+  /**
+   * 设置设备Id
+   * @param {string} id - 设备 ID
+   */
   setUid = (id: string) => {
     const prevId = this._uid;
     this._uid = id;
@@ -69,7 +78,11 @@ class UserStore implements UserStoreType {
     }
   };
 
-  // 获取sessionId
+  /**
+   * 获取sessionId
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - Session ID
+   */
   getSessionId = (trackingId: string) => {
     // 设置了session时长，就需要检查session是否过期
     const {
@@ -94,7 +107,11 @@ class UserStore implements UserStoreType {
     return this._sessionId[trackingId];
   };
 
-  // 设置sessionId
+  /**
+   * 设置sessionId
+   * @param {string} trackingId - 实例 ID
+   * @param {string} [id] - Session ID
+   */
   setSessionId = (trackingId: string, id?: string) => {
     const prevId = this._sessionId[trackingId];
     if (!id) {
@@ -117,11 +134,19 @@ class UserStore implements UserStoreType {
     }
   };
 
-  // 获取userId存储key
+  /**
+   * 获取userId存储key
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - userId 存储 key
+   */
   _getUserIdKey = (trackingId: string) =>
     this.growingIO.dataStore.getStorageKey(trackingId, 'userId');
 
-  // 获取userId
+  /**
+   * 获取userId
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - User ID
+   */
   getUserId = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
     // 内存中拿不到尝试从存储中拿
@@ -133,7 +158,11 @@ class UserStore implements UserStoreType {
     return this._userId[trackingId];
   };
 
-  // 设置userId
+  /**
+   * 设置userId
+   * @param {string} trackingId - 实例 ID
+   * @param {string} id - User ID
+   */
   setUserId = (trackingId: string, id: string) => {
     const prevId = this._userId[trackingId];
     this._userId[trackingId] = isNil(id) ? '' : id;
@@ -151,11 +180,19 @@ class UserStore implements UserStoreType {
     if (id) this.setGioId(trackingId, id);
   };
 
-  // 获取userKey存储key
+  /**
+   * 获取userKey存储key
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - userKey 存储 key
+   */
   _getUserKeyKey = (trackingId: string) =>
     this.growingIO.dataStore.getStorageKey(trackingId, 'userKey');
 
-  // 获取userKey
+  /**
+   * 获取userKey
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - User Key
+   */
   getUserKey = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
     // 内存中拿不到尝试从存储中拿
@@ -167,7 +204,11 @@ class UserStore implements UserStoreType {
     return this._userKey[trackingId];
   };
 
-  // 设置userKey
+  /**
+   * 设置userKey
+   * @param {string} trackingId - 实例 ID
+   * @param {string} key - User Key
+   */
   setUserKey = (trackingId: string, key: string) => {
     const prevKey = this._userKey[trackingId];
     this._userKey[trackingId] = isNil(key) ? '' : key;
@@ -184,11 +225,19 @@ class UserStore implements UserStoreType {
     }
   };
 
-  // 获取gioId存储key
+  /**
+   * 获取gioId存储key
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - gioId 存储 key
+   */
   _getGioIdKey = (trackingId: string) =>
     this.growingIO.dataStore.getStorageKey(trackingId, 'gioId');
 
-  // 获取gioId
+  /**
+   * 获取gioId
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - Gio ID
+   */
   getGioId = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
     // 内存中拿不到尝试从存储中拿
@@ -200,7 +249,11 @@ class UserStore implements UserStoreType {
     return this._gioId[trackingId];
   };
 
-  // 设置gioId
+  /**
+   * 设置gioId
+   * @param {string} trackingId - 实例 ID
+   * @param {string} gioId - Gio ID
+   */
   setGioId = (trackingId: string, gioId: string) => {
     const prevId = this._gioId[trackingId];
     this._gioId[trackingId] = isNil(gioId) ? '' : gioId;
@@ -217,7 +270,10 @@ class UserStore implements UserStoreType {
     }
   };
 
-  // 初始化用户信息
+  /**
+   * 初始化用户信息
+   * @param {string} trackingId - 实例 ID
+   */
   initUserInfo = (trackingId: string) => {
     const { minipInstance } = this.growingIO;
     const storeKeys = [
@@ -241,7 +297,9 @@ class UserStore implements UserStoreType {
     });
   };
 
-  // 退出小程序时在存储中同步用户信息
+  /**
+   * 退出小程序时在存储中同步用户信息
+   */
   saveUserInfo = () => {
     const {
       minipInstance,

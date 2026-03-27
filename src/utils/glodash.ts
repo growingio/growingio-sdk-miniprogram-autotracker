@@ -1,26 +1,76 @@
+/**
+ * 检查值是否为 null 或 undefined
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为 null 或 undefined，返回 true，否则返回 false
+ */
 export const isNil = (o: any): boolean =>
   ['undefined', 'null'].includes(typeOf(o));
 
+/**
+ * 检查值是否为字符串
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为字符串，返回 true，否则返回 false
+ */
 export const isString = (o: any): boolean => typeOf(o) === 'string';
 
+/**
+ * 检查值是否为 NaN
+ * @param {any} value - 要检查的值
+ * @returns {boolean} - 如果值为 NaN，返回 true，否则返回 false
+ */
 export const isNaN = (value: any) => toString(Number(value)) === 'NaN';
 
+/**
+ * 检查值是否为数字
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为数字，返回 true，否则返回 false
+ */
 export const isNumber = (o: any): boolean => typeOf(o) === 'number';
 
+/**
+ * 检查值是否为布尔值
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为布尔值，返回 true，否则返回 false
+ */
 export const isBoolean = (o: any): boolean => typeOf(o) === 'boolean';
 
+/**
+ * 检查值是否为对象（非 null）
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为对象，返回 true，否则返回 false
+ */
 export const isObject = (o: any): boolean =>
   Object.prototype.toString.call(o) === '[object Object]' && !isNil(o);
 
+/**
+ * 检查值是否为正则表达式
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为正则表达式，返回 true，否则返回 false
+ */
 export const isRegExp = (o: any): boolean =>
   Object.prototype.toString.call(o) === '[object RegExp]';
 
+/**
+ * 检查值是否为函数
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为函数，返回 true，否则返回 false
+ */
 export const isFunction = (o: any): boolean =>
   ['function', 'asyncfunction'].includes(typeOf(o));
 
+/**
+ * 检查值是否为数组
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为数组，返回 true，否则返回 false
+ */
 export const isArray = (o: any): boolean =>
   Array.isArray(o) && typeOf(o) === 'array';
 
+/**
+ * 检查值是否为日期对象
+ * @param {any} o - 要检查的值
+ * @returns {boolean} - 如果值为日期对象，返回 true，否则返回 false
+ */
 export const isDate = (o: any): boolean => typeOf(o) === 'date';
 
 // Number

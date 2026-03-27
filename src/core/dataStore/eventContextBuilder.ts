@@ -11,7 +11,13 @@ import { isEmpty, unset } from '@@/utils/glodash';
 class EventContextBuilder {
   constructor(public growingIO: GrowingIOType) {}
 
-  // 通用字段组装
+  /**
+   * 通用字段组装
+   * @param {string} trackingId - 实例 ID
+   * @param {any} [params] - 额外参数
+   * @param {boolean} [executeAttributes=true] - 是否执行属性组装
+   * @returns {any} - 组装后的事件上下文
+   */
   main = (trackingId: string, params?: any, executeAttributes = true) => {
     // 预置事件或者默认就是发给主实例的事件不需要传trackingId
     if (!trackingId) {

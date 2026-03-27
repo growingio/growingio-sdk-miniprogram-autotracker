@@ -54,6 +54,9 @@ class GioPerformance {
     });
   }
 
+  /**
+   * 初始化性能采集
+   */
   init = () => {
     const { dataCollect } = this.growingIO.vdsConfig;
     const { monitor, exception, network } = this.options;
@@ -66,13 +69,15 @@ class GioPerformance {
     if (network) {
       this.network = new Network(this.growingIO, this.options);
     }
-    // SDK初始化完成发送缓存队列
+    // SDK 初始化完成发送缓存队列
     if (dataCollect) {
       this.sendCacheQuene();
     }
   };
 
-  // 发送缓存队列
+  /**
+   * 发送缓存队列
+   */
   sendCacheQuene = () => {
     if (!ut.isEmpty(this.cacheQueue)) {
       this.cacheQueue.forEach((o: any) => {
@@ -82,14 +87,20 @@ class GioPerformance {
     }
   };
 
-  // 构建各种性能事件
+  /**
+   * 构建各种性能事件
+   * @param {string} eventName - 事件名称
+   * @param {any} attributes - 属性
+   * @param {any} [extra] - 额外数据
+   * @returns {boolean | undefined} - 如果 SDK 未初始化或关闭采集，返回 false
+   */
   buildPerfEvent = (eventName: string, attributes: any, extra?: any) => {
     const {
       dataStore: { eventContextBuilder, eventConverter },
       gioSDKInitialized,
       vdsConfig
     } = this.growingIO;
-    // SDK没初始化完成或初始化关闭采集开关的事件先存起来，等SDK初始化完成或开启采集开关再发
+    // SDK 没初始化完成或初始化关闭采集开关的事件先存起来，等 SDK 初始化完成或开启采集开关再发
     if (!gioSDKInitialized || !vdsConfig.dataCollect) {
       this.cacheQueue = [
         ...this.cacheQueue,
@@ -101,7 +112,7 @@ class GioPerformance {
       ];
       return false;
     }
-    // 处理过长的小数，保留0位
+    // 处理过长的小数，保留 0 位
     ut.forEach(attributes, (v, k) => {
       if (Number.isNaN(v) || ut.isNil(v) || Number(v) < 0) {
         attributes[k] = 0;

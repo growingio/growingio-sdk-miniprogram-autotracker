@@ -116,7 +116,7 @@ class GioTaroAdapter {
   /**
    * 代理Taro2
    * @description 代理Taro2的createApp和createComponent
-   * @param {any} taro Taro实例
+   * @param {any} taro - Taro实例
    */
   proxyTaro2 = (taro: any) => {
     const { createApp: originApp, createComponent: originComponent } = taro;
@@ -141,8 +141,8 @@ class GioTaroAdapter {
   /**
    * 注入Taro2组件
    * @description 对Taro2组件进行埋点注入
-   * @param {any} ComponentRef 组件引用
-   * @param {boolean} isPage 是否为页面
+   * @param {any} ComponentRef - 组件引用
+   * @param {boolean} isPage - 是否为页面
    */
   injectTaro2Component = (ComponentRef: any, isPage: boolean) => {
     const targetType = isPage ? 'page' : 'component';
@@ -226,7 +226,7 @@ class GioTaroAdapter {
   /**
    * 处理Taro3生命周期
    * @description 拦截并处理生命周期事件
-   * @param {any[]} argsArray 参数数组
+   * @param {any[]} argsArray - 参数数组
    */
   handleTaro3Lifecycle = (argsArray: any[]) => {
     const {
@@ -256,7 +256,7 @@ class GioTaroAdapter {
   /**
    * 处理Taro3页面对象修改
    * @description 拦截modifyPageObject消息，处理分享等事件
-   * @param {any} pageObject 页面对象
+   * @param {any} pageObject - 页面对象
    */
   handleTaro3PageObject = (pageObject: any) => {
     const { eventHooks } = this.growingIO.dataStore;
@@ -274,8 +274,8 @@ class GioTaroAdapter {
   /**
    * 处理Taro3事件分发
    * @description 拦截dispatchTaroEvent消息，处理点击等用户行为
-   * @param {any} taroEvent Taro事件对象
-   * @param {any} taroElement Taro元素对象
+   * @param {any} taroEvent - Taro事件对象
+   * @param {any} taroElement - Taro元素对象
    */
   handleTaro3DispatchEvent = (taroEvent: any, taroElement: any) => {
     const { eventHooks } = this.growingIO.dataStore;
@@ -302,11 +302,11 @@ class GioTaroAdapter {
   /**
    * 处理Taro3具体事件逻辑
    * @description 获取真实方法名并触发埋点
-   * @param {any} taroEvent
-   * @param {any} taroElement
-   * @param {Function} actionEffects
-   * @param {any} currentTarget
-   * @param {any} detail
+   * @param {any} taroEvent - Taro事件对象
+   * @param {any} taroElement - Taro元素对象
+   * @param {Function} actionEffects - 埋点处理函数
+   * @param {any} currentTarget - 当前目标
+   * @param {any} detail - 事件详情
    */
   processTaro3Event = (
     taroEvent,
@@ -427,10 +427,10 @@ class GioTaroAdapter {
   /**
    * 获取 Taro3 React 方法名
    * @description 解析 React 组件中的事件处理函数名
-   * @param {any} originHandler 原始处理函数
-   * @param {any} taroEvent Taro事件对象
-   * @param {any} taroElement Taro元素对象
-   * @returns {string} 方法名
+   * @param {any} originHandler - 原始处理函数
+   * @param {any} taroEvent - Taro事件对象
+   * @param {any} taroElement - Taro元素对象
+   * @returns {string} - 方法名
    */
   taro3reactGetFuncName = (
     originHandler: any,
@@ -475,9 +475,9 @@ class GioTaroAdapter {
   /**
    * 获取 Taro3 Vue3 方法名
    * @description 解析 Vue3 组件中的事件处理函数名
-   * @param {any} originHandler 原始处理函数
-   * @param {any} taroElement Taro元素对象
-   * @returns {string} 方法名
+   * @param {any} originHandler - 原始处理函数
+   * @param {any} taroElement - Taro元素对象
+   * @returns {string} - 方法名
    */
   taro3vue3GetFuncName = (originHandler: any, taroElement: any) => {
     if (ut.startsWith(`${originHandler.value}`.replace(' ', ''), 'function(')) {
@@ -548,8 +548,8 @@ class GioTaroAdapter {
   /**
    * 生成匿名方法名
    * @description 当无法获取真实方法名时，生成一个唯一的匿名方法名
-   * @param {any} taroElement Taro元素对象
-   * @returns {string} 匿名方法名
+   * @param {any} taroElement - Taro元素对象
+   * @returns {string} - 匿名方法名
    */
   getAnonymousFunc = (taroElement: any) => {
     const path = this.growingIO.dataStore.eventHooks.currentPage.getPagePath();
@@ -594,9 +594,9 @@ class GioTaroAdapter {
   /**
    * 重写 Vue2 方法
    * @description 包装原始方法以注入埋点逻辑
-   * @param {string} name 方法名
-   * @param {any} method 原始方法
-   * @returns {Function} 包装后的方法
+   * @param {string} name - 方法名
+   * @param {any} method - 原始方法
+   * @returns {Function} - 包装后的方法
    */
   proxyMethods = (name: string, method: any) => {
     const { eventHooks } = this.growingIO.dataStore;
@@ -612,9 +612,9 @@ class GioTaroAdapter {
   /**
    * 定义属性
    * @description Object.defineProperty 的封装
-   * @param {any} target 目标对象
-   * @param {string} key 属性名
-   * @param {any} value 属性值
+   * @param {any} target - 目标对象
+   * @param {string} key - 属性名
+   * @param {any} value - 属性值
    */
   defineProperty = (target, key, value) => {
     Object.defineProperty(target, key, {
@@ -629,7 +629,7 @@ class GioTaroAdapter {
    * 保存页面节点信息
    * @description Taro3中存储当前页面完整的数据以获取曝光事件中的dataset
    * @see https://taro-docs.jd.com/taro/docs/react-overall#dataset
-   * @param {any} body 页面 body 节点
+   * @param {any} body - 页面 body 节点
    */
   saveFullPage = (body: any) => {
     const pageTraverse = (tEle: any) => {

@@ -53,9 +53,9 @@ class GioUniAppAdapter {
   /**
    * 获取自定义真实的方法名
    * 用于将框架编译后的方法名映射回用户定义的原始方法名
-   * @param eventName 事件名称
-   * @param e 事件对象
-   * @returns 真实的方法名
+   * @param {string} eventName - 事件名称
+   * @param {any} e - 事件对象
+   * @returns {string} - 真实的方法名
    */
   getHandlerName = (eventName: string, e: any): string => {
     if (eventName === '__e') {
@@ -73,8 +73,8 @@ class GioUniAppAdapter {
   /**
    * 从事件对象中获取处理函数的真实名称
    * 处理UniApp特有的事件机制，提取事件处理函数的原始名称
-   * @param e 事件对象
-   * @returns 处理函数的真实名称
+   * @param {any} e - 事件对象
+   * @returns {string} - 处理函数的真实名称
    */
   private getEventHandlerNameFromE = (e: any): string => {
     let methodName = '__e'; // 默认方法名
@@ -136,7 +136,7 @@ class GioUniAppAdapter {
    * 重写生命周期效果函数
    * 解决Vue2中页面生命周期异步执行导致的问题
    * 对Page类型的生命周期使用setTimeout延迟执行，保证执行顺序正确
-   * @param eventHooks 事件钩子对象
+   * @param {any} eventHooks - 事件钩子对象
    */
   private overrideLifeFcEffectsFn = (eventHooks: any): void => {
     const originFunc = eventHooks.lifeFcEffectsFn;
@@ -157,7 +157,7 @@ class GioUniAppAdapter {
   /**
    * Vue3代理实现
    * 为Vue3框架添加GrowingIO的代理逻辑
-   * @param vue Vue3实例
+   * @param {any} vue - Vue3实例
    */
   uniVue3Proxy = (vue: any): void => {
     const {
@@ -181,7 +181,7 @@ class GioUniAppAdapter {
   /**
    * 重写对象遍历逻辑
    * 确保按照正确的优先级遍历对象属性
-   * @param eventHooks 事件钩子对象
+   * @param {any} eventHooks - 事件钩子对象
    */
   private overrideObjectTraverse = (eventHooks: any): void => {
     eventHooks.objectTraverse = (target: any, fn: any) => {
@@ -227,7 +227,7 @@ class GioUniAppAdapter {
   /**
    * 重写getPageTitle方法
    * 确保能正确获取Vue组件中定义的页面标题
-   * @param minipInstance 小程序实例
+   * @param {any} minipInstance - 小程序实例
    */
   private overrideGetPageTitle = (minipInstance: any): void => {
     const originGetter = minipInstance.getPageTitle; // 保存原始getter
@@ -255,8 +255,8 @@ class GioUniAppAdapter {
   /**
    * 添加Vue混入
    * 注入GrowingIO的代理逻辑到Vue组件生命周期中
-   * @param vue Vue实例
-   * @param eventHooks 事件钩子对象
+   * @param {any} vue - Vue实例
+   * @param {any} eventHooks - 事件钩子对象
    */
   private addVueMixin = (vue: any, eventHooks: any): void => {
     const self = this;
@@ -285,8 +285,8 @@ class GioUniAppAdapter {
   /**
    * 代理普通方法
    * 处理传统Vue选项式API和组合式API中定义的方法
-   * @param instance Vue组件实例
-   * @param eventHooks 事件钩子对象
+   * @param {any} instance - Vue组件实例
+   * @param {any} eventHooks - 事件钩子对象
    */
   private proxyMethods = (instance: any, eventHooks: any): void => {
     // 代理单个方法的函数
@@ -330,8 +330,8 @@ class GioUniAppAdapter {
   /**
    * 代理exposed方法
    * 处理<script setup>中使用defineExpose暴露的方法
-   * @param instance Vue组件实例
-   * @param eventHooks 事件钩子对象
+   * @param {any} instance - Vue组件实例
+   * @param {any} eventHooks - 事件钩子对象
    */
   private proxyExposedMethods = (instance: any, eventHooks: any): void => {
     // 获取组件暴露的方法
@@ -379,8 +379,8 @@ class GioUniAppAdapter {
   /**
    * 代理emit方法
    * 监听组件通过emit触发的事件
-   * @param instance Vue组件实例
-   * @param eventHooks 事件钩子对象
+   * @param {any} instance - Vue组件实例
+   * @param {any} eventHooks - 事件钩子对象
    */
   private proxyEmit = (instance: any, eventHooks: any): void => {
     const tEmit = instance._.emit; // 保存原始emit方法
@@ -395,10 +395,9 @@ class GioUniAppAdapter {
   /**
    * 拼接方法名称
    * 根据不同情况组合出最终的方法名
-   * @param originName 原始名称
-   * @param traversalName 遍历得到的名称
-   * @param exposedName 暴露的名称
-   * @returns 最终使用的方法名
+   * @param {string} originName - 原始名称
+   * @param {string} traversalName - 遍历得到的名称
+   * @returns {string} - 最终使用的方法名
    */
   splicingMethodName = (traversalName: string, originName: string): string => {
     if (originName) {

@@ -59,7 +59,10 @@ class GioImpressionTracking {
     });
   }
 
-  // 遍历页面中的自定义组件进行监听
+  /**
+   * 遍历页面中的自定义组件进行监听
+   * @param {any} target - 目标对象
+   */
   traverseListen = (target: any) => {
     const { minipInstance } = this.growingIO;
     if (ut.isFunction(target?.selectAllComponents)) {
@@ -75,8 +78,14 @@ class GioImpressionTracking {
     minipInstance.initImpression(target);
   };
 
-  // 判断是否为相同的监听节点
-  // 这个方法中的hashCode和isEqualArray要直接引入使用，否则可能会在jd/my/tb小程序中出现找不到的情况（运行时机问题）
+  /**
+   * 判断是否为相同的监听节点
+   * 这个方法中的 hashCode 和 isEqualArray 要直接引入使用，否则可能会在 jd/my/tb 小程序中出现找不到的情况（运行时机问题）
+   * @param {any[]} rs - 节点信息
+   * @param {string} route - 路由
+   * @param {string} nodeId - 节点 ID
+   * @returns {boolean} - 是否相同
+   */
   isEqualRects = (rs: any[], route: string, nodeId: string) => {
     const controlGroup = ((this.rects[route] ?? {})[nodeId] ?? []).map((o) =>
       hashCode(JSON.stringify(o))
@@ -85,7 +94,11 @@ class GioImpressionTracking {
     return isEqualArray(controlGroup, comparisonGroup);
   };
 
-  // 获取nodeId
+  /**
+   * 获取 nodeId
+   * @param {any} collectTarget - 采集目标
+   * @returns {string} - 节点 ID
+   */
   getNodeId = (collectTarget: any) => {
     const { gioPlatform } = this.growingIO;
     switch (gioPlatform) {
@@ -116,7 +129,13 @@ class GioImpressionTracking {
     }
   };
 
-  // 获取到可监听节点后校验节点信息
+  /**
+   * 获取到可监听节点后校验节点信息
+   * @param {any} rect - 节点信息
+   * @param {any} collectTarget - 采集目标
+   * @param {string} optionKey - 选项 key
+   * @returns {boolean} - 是否继续
+   */
   rectObserve = (rect, collectTarget, optionKey) => {
     const { gioPlatform } = this.growingIO;
     if (
@@ -155,7 +174,12 @@ class GioImpressionTracking {
     }
   };
 
-  // swan、my中optionKey为'selectAll'，其他为'observeAll'，不含快应用
+  /**
+   * 主入口
+   * swan、my 中 optionKey 为 'selectAll'，其他为 'observeAll'，不含快应用
+   * @param {any} collectTarget - 采集目标
+   * @param {'observeAll' | 'selectAll'} optionKey - 选项 key
+   */
   main = (collectTarget: any, optionKey: 'observeAll' | 'selectAll') => {
     const { gioPlatform } = this.growingIO;
     // 页面中存在曝光标记的节点才监听
@@ -185,7 +209,11 @@ class GioImpressionTracking {
     }
   };
 
-  // 创建监听
+  /**
+   * 创建监听
+   * @param {any} collectTarget - 采集目标
+   * @param {'observeAll' | 'selectAll'} optionKey - 选项 key
+   */
   createObserver = (
     collectTarget: any,
     optionKey: 'observeAll' | 'selectAll'
@@ -234,7 +262,11 @@ class GioImpressionTracking {
     this.targetObserve(observer, page);
   };
 
-  // 给目标节点添加监听回调
+  /**
+   * 给目标节点添加监听回调
+   * @param {any} observerTarget - 监听目标
+   * @param {any} collectPage - 采集页面
+   */
   targetObserve = (observerTarget: any, collectPage: any) => {
     const { taro, impressionScale } = this.growingIO.vdsConfig;
     // 数值要大于0，只能无限趋近于0，等于0的时候会导致没出现就会发曝光
@@ -288,7 +320,11 @@ class GioImpressionTracking {
     });
   };
 
-  // 曝光参数获取
+  /**
+   * 曝光参数获取
+   * @param {any} dataSet - 数据集
+   * @returns {any} - 曝光参数
+   */
   getImpressionProperties = (dataSet: any) => {
     let data: any = {
       eventName: undefined,
@@ -332,7 +368,12 @@ class GioImpressionTracking {
     return data;
   };
 
-  // 获取Taro3节点上的dataset
+  /**
+   * 获取 Taro3 节点上的 dataset
+   * @param {string} route - 路由
+   * @param {string} targetId - 目标 ID
+   * @returns {any} - dataset
+   */
   getTaro3Dataset = (route: string, targetId: string) => {
     const page = this.growingIO?.taro3VMs[route];
     if (!page) {
@@ -359,7 +400,11 @@ class GioImpressionTracking {
     return impDataset;
   };
 
-  // 创建半自动曝光事件
+  /**
+   * 创建半自动曝光事件
+   * @param {any} dataProperties - 曝光数据
+   * @param {string[]} sendTargets - 发送目标
+   */
   buildImpEvent = (dataProperties: any, sendTargets: string[]) => {
     const { eventName, properties } = dataProperties;
     const {

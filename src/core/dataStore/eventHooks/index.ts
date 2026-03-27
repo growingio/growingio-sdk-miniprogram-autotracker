@@ -41,12 +41,21 @@ class EventHooks implements EventHooksType {
     this.currentPage = new MinipPage(this.growingIO);
   }
 
-  // 判断是否为非构造函数的一个函数
+  /**
+   * 判断是否为非构造函数的一个函数
+   * @param {string} key - 函数名
+   * @param {any} method - 函数体
+   * @returns {boolean} - 是否为普通函数
+   */
   isNormalFc = (key: string, method: any) => {
     return isFunction(method) && key !== 'constructor';
   };
 
-  // 对象的遍历
+  /**
+   * 对象的遍历
+   * @param {any} target - 目标对象
+   * @param {any} fn - 回调函数
+   */
   objectTraverse = (target: any, fn: any) => {
     Object.getOwnPropertyNames(target).forEach((k: string) => fn(k, target));
     if (has(target, 'methods')) {
@@ -72,7 +81,11 @@ class EventHooks implements EventHooksType {
     }
   };
 
-  // 补充生命周期函数
+  /**
+   * 补充生命周期函数
+   * @param {any} target - 目标对象
+   * @param {'app' | 'page'} type - 类型
+   */
   supLifeFcs = (target: any, type: 'app' | 'page') => {
     if (isArray(this[`${type}Handlers`])) {
       this[`${type}Handlers`].forEach((k: string) => {
@@ -89,6 +102,12 @@ class EventHooks implements EventHooksType {
 
   /**
    * 执行生命周期回调并广播事件
+   * @param {any} instance - 实例
+   * @param {any} args - 参数
+   * @param {string} cType - 类型
+   * @param {string} eventName - 事件名
+   * @param {any} [result] - 结果
+   * @returns {any} - 结果
    */
   lifeFcEffectsFn = (instance, args, cType, eventName, result = undefined) => {
     // 创建参数数组副本
@@ -113,7 +132,11 @@ class EventHooks implements EventHooksType {
   };
 
   /**
-   * 生命周期方法effects
+   * 生命周期方法 effects
+   * @param {string} eventName - 事件名
+   * @param {any} method - 原方法
+   * @param {'App' | 'Page'} cType - 类型
+   * @returns {Function} - 包装后的函数
    */
   lifeFcEffects = (eventName: string, method: any, cType: 'App' | 'Page') => {
     const self = this;
@@ -213,8 +236,11 @@ class EventHooks implements EventHooksType {
     };
   };
 
-  /*
-   * 自定义方法effects
+  /**
+   * 自定义方法 effects
+   * @param {string} eventName - 事件名
+   * @param {any} method - 原方法
+   * @returns {Function} - 包装后的函数
    */
   customFcEffects = (eventName: string, method: any) => {
     const self = this;
@@ -254,7 +280,12 @@ class EventHooks implements EventHooksType {
     };
   };
 
-  // App中方法代理
+  /**
+   * App 中方法代理
+   * @param {string} eventName - 事件名
+   * @param {any} method - 原方法
+   * @returns {Function} - 代理后的函数
+   */
   appApplyProxy = (eventName: string, method: any) => {
     if (this.appHandlers.includes(eventName)) {
       return this.lifeFcEffects(eventName, method, 'App');
@@ -263,7 +294,12 @@ class EventHooks implements EventHooksType {
     }
   };
 
-  // Page中方法代理
+  /**
+   * Page 中方法代理
+   * @param {string} eventName - 事件名
+   * @param {any} method - 原方法
+   * @returns {Function} - 代理后的函数
+   */
   pageApplyProxy = (eventName: string, method: any) => {
     if (this.pageHandlers.includes(eventName)) {
       return this.lifeFcEffects(eventName, method, 'Page');
@@ -272,7 +308,11 @@ class EventHooks implements EventHooksType {
     }
   };
 
-  // App重写遍历
+  /**
+   * App 重写遍历
+   * @param {any} options - App 配置项
+   * @returns {any} - 重写后的配置项
+   */
   appOverriding = (options: any) => {
     this.setAppEffectCbs();
     const fn = (k: string, target: any) => {
@@ -287,7 +327,11 @@ class EventHooks implements EventHooksType {
     return options;
   };
 
-  // Page重写遍历
+  /**
+   * Page 重写遍历
+   * @param {any} options - Page 配置项
+   * @returns {any} - 重写后的配置项
+   */
   pageOverriding = (options: any) => {
     this.setPageEffectCbs();
     const fn = (k: string, target: any) => {
@@ -302,7 +346,11 @@ class EventHooks implements EventHooksType {
     return options;
   };
 
-  // Component/Behavior重写(重写除构造函数之外的所有方法)
+  /**
+   * Component/Behavior 重写(重写除构造函数之外的所有方法)
+   * @param {any} options - Component/Behavior 配置项
+   * @returns {any} - 重写后的配置项
+   */
   componentOverriding = (options: any) => {
     this.setPageEffectCbs();
     const fn = (k: string, target: any) => {
@@ -326,7 +374,9 @@ class EventHooks implements EventHooksType {
     return options;
   };
 
-  // 挂载App生命周期的effect方法
+  /**
+   * 挂载 App 生命周期的 effect 方法
+   */
   setAppEffectCbs = () => {
     const self = this;
     this.appHandlers.forEach((handlerName: string) => {
@@ -336,7 +386,9 @@ class EventHooks implements EventHooksType {
     });
   };
 
-  // 挂载Page/Component生命周期的effect方法
+  /**
+   * 挂载 Page/Component 生命周期的 effect 方法
+   */
   setPageEffectCbs = () => {
     const self = this;
     this.pageHandlers.forEach((handlerName: string) => {
@@ -366,6 +418,10 @@ class EventHooks implements EventHooksType {
       ? this.originalBehavior(this.componentOverriding(behavior))
       : this.componentOverriding(behavior);
 
+  /**
+   * 原生方法重写
+   * @param {string[]} [designated] - 指定需要重写的方法列表
+   */
   nativeGrowing = (
     designated: string[] = ['App', 'Page', 'Component', 'Behavior']
   ) => {
@@ -426,7 +482,9 @@ class EventHooks implements EventHooksType {
     }
   };
 
-  // 初始化原始值
+  /**
+   * 初始化原始值
+   */
   initOriginalValue = () => {
     this.setAppEffectCbs();
     this.setPageEffectCbs();
@@ -436,7 +494,9 @@ class EventHooks implements EventHooksType {
     this.originalBehavior = niceTry(() => Behavior || global.Behavior);
   };
 
-  // 初始化事件钩子
+  /**
+   * 初始化事件钩子
+   */
   initEventHooks = () => {
     const self = this;
     const { platformConfig, gioPlatform } = this.growingIO;

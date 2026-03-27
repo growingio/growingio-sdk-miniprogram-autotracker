@@ -7,6 +7,7 @@ import {
   isObject,
   keys,
   toString,
+  typeOf,
   unset
 } from '@@/utils/glodash';
 import {
@@ -110,7 +111,11 @@ class GrowingIO implements GrowingIOType {
     this.plugins.innerPluginInit();
   }
 
-  // SDK初始化方法
+  /**
+   * SDK初始化方法
+   * @param {any} options - 初始化参数
+   * @returns {boolean} - 初始化结果
+   */
   init = (options: any) => {
     // 初始化实例之前
     this.emitter.emit(EMIT_MSG.ON_SDK_INITIALIZE_BEFORE, { options });
@@ -162,7 +167,13 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 需要校验实例的方法执行
+  /**
+   * 需要校验实例的方法执行
+   * @param {string} trackingId - 实例 ID
+   * @param {string} handler - 方法名
+   * @param {any} args - 参数
+   * @returns {any} - 执行结果
+   */
   handlerDistribute = (trackingId: string, handler: string, args: any) => {
     const { initializedTrackingIds, getTrackerVds } = this.dataStore;
     const trackerVds = getTrackerVds(trackingId);
@@ -173,26 +184,46 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 手动注册插件
+  /**
+   * 手动注册插件
+   * @param {any} plugins - 插件列表
+   */
   registerPlugins = (plugins: any) => {
     this.plugins.pluginItems = [...this.plugins.pluginItems, ...plugins];
     this.plugins.installAll(plugins);
   };
 
-  // 获取所有已注册插件
+  /**
+   * 获取所有已注册插件
+   * @returns {any[]} - 插件列表
+   */
   getPlugins = () => this.plugins.pluginItems;
 
-  // 获取设备ID（匿名用户ID）
+  /**
+   * 获取设备ID（匿名用户ID）
+   * @returns {string} - 设备ID
+   */
   getDeviceId = () => this.userStore.getUid();
 
-  // 运行中获取配置
+  /**
+   * 运行中获取配置
+   * @param {string} trackingId - 实例 ID
+   * @param {string} [k] - 配置键名
+   * @returns {any} - 配置值
+   */
   getOption = (trackingId: string, k?: string) =>
     this.dataStore.getOption(trackingId, k);
 
-  // 运行中修改配置
+  /**
+   * 运行中修改配置
+   * @param {string} trackingId - 实例 ID
+   * @param {string} k - 配置键名
+   * @param {any} v - 配置值
+   * @returns {boolean} - 是否修改成功
+   */
   setOption = (trackingId: string, k: string, v: any) => {
     if (keys(ALLOW_SET_OPTIONS).includes(k)) {
-      if (typeof v === DEFAULT_SETTINGS[k]?.type) {
+      if (typeOf(v) === DEFAULT_SETTINGS[k]?.type) {
         this.dataStore.setOption(trackingId, k, v);
         consoleText(`已修改${ALLOW_SET_OPTIONS[k]}: ${v}`, 'info');
         return true;
@@ -206,7 +237,12 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 设置页面属性
+  /**
+   * 设置页面属性
+   * @param {string} trackingId - 实例 ID
+   * @param {any} properties - 页面属性对象
+   * @returns {boolean} - 是否设置成功
+   */
   setPageAttributes = (trackingId: string, properties: any) => {
     if (isObject(properties) && !isEmpty(properties)) {
       const { currentPage } = this.dataStore.eventHooks;
@@ -235,7 +271,12 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 清空已设置的页面属性
+  /**
+   * 清空已设置的页面属性
+   * @param {string} trackingId - 实例 ID
+   * @param {string[] | undefined} properties - 需要清空的属性名列表，如果不传则清空所有
+   * @returns {boolean} - 是否清空成功
+   */
   clearPageAttributes = (
     trackingId: string,
     properties: string[] | undefined
@@ -260,7 +301,11 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 手动发page
+  /**
+   * 手动发送页面浏览事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} [props] - 事件属性
+   */
   sendPage = (trackingId: string, props?: any) => {
     const { trackPage } = this.dataStore.getTrackerVds(trackingId);
     if (!trackPage) {
@@ -273,7 +318,11 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 设置设备ID，一般为openId
+  /**
+   * 设置设备ID，一般为openId
+   * @param {string} trackingId - 实例 ID
+   * @param {string | number} assignmentId - 设备ID
+   */
   identify = (trackingId: string, assignmentId: string | number) => {
     if (trackingId !== this.trackingId) {
       callError('identify', !1, '子实例不允许调用identify');
@@ -306,7 +355,11 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 发送用户属性
+  /**
+   * 发送用户属性
+   * @param {string} trackingId - 实例 ID
+   * @param {any} userAttributes - 用户属性对象
+   */
   setUserAttributes = (trackingId: string, userAttributes: any) => {
     if (isObject(userAttributes) && !isEmpty(userAttributes)) {
       const { eventContextBuilder, eventInterceptor, lastVisitEvent } =
@@ -332,7 +385,12 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 设置登录用户Id
+  /**
+   * 设置登录用户Id
+   * @param {string} trackingId - 实例 ID
+   * @param {string | number} userId - 用户 ID
+   * @param {string} [userKey] - 用户 Key
+   */
   setUserId = (
     trackingId: string,
     userId: string | number,
@@ -362,13 +420,21 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 清除登录用户Id
+  /**
+   * 清除登录用户Id
+   * @param {string} trackingId - 实例 ID
+   */
   clearUserId = (trackingId: string) => {
     this.userStore.setUserId(trackingId, undefined);
     this.userStore.setUserKey(trackingId, undefined);
   };
 
-  // 设置全局通用属性（即每个事件都会带上的属性值）
+  /**
+   * 设置全局通用属性（即每个事件都会带上的属性值）
+   * @param {string} trackingId - 实例 ID
+   * @param {any} properties - 属性对象
+   * @returns {boolean} - 是否设置成功
+   */
   setGeneralProps = (trackingId: string, properties: any) => {
     if (isObject(properties) && !isEmpty(properties)) {
       if (isEmpty(this.dataStore.generalProps[trackingId])) {
@@ -389,7 +455,12 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 清空已设置的全局通用属性
+  /**
+   * 清空已设置的全局通用属性
+   * @param {string} trackingId - 实例 ID
+   * @param {string[] | undefined} properties - 需要清空的属性名列表，如果不传则清空所有
+   * @returns {boolean} - 是否清空成功
+   */
   clearGeneralProps = (
     trackingId: string,
     properties: string[] | undefined
@@ -410,7 +481,12 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 自定义埋点事件
+  /**
+   * 自定义埋点事件
+   * @param {string} trackingId - 实例 ID
+   * @param {string} eventName - 事件名称
+   * @param {object} properties - 事件属性
+   */
   track = (
     trackingId: string,
     eventName: string,
@@ -441,7 +517,12 @@ class GrowingIO implements GrowingIOType {
     });
   };
 
-  // 初始化事件计时器
+  /**
+   * 初始化事件计时器
+   * @param {string} trackingId - 实例 ID
+   * @param {string} eventName - 事件名称
+   * @returns {string | false} - 计时器 ID 或失败
+   */
   trackTimerStart = (trackingId: string, eventName: string) => {
     const { dataCollect } = this.dataStore.getTrackerVds(trackingId);
     if (dataCollect) {
@@ -463,7 +544,12 @@ class GrowingIO implements GrowingIOType {
     return false;
   };
 
-  // 暂停事件计时器
+  /**
+   * 暂停事件计时器
+   * @param {string} trackingId - 实例 ID
+   * @param {string} timerId - 计时器 ID
+   * @returns {boolean} - 是否暂停成功
+   */
   trackTimerPause = (trackingId: string, timerId: string) => {
     const timers = this.dataStore.trackTimers[trackingId];
     if (timerId && timers && timers[timerId]) {
@@ -477,7 +563,12 @@ class GrowingIO implements GrowingIOType {
     return false;
   };
 
-  // 恢复事件计时器
+  /**
+   * 恢复事件计时器
+   * @param {string} trackingId - 实例 ID
+   * @param {string} timerId - 计时器 ID
+   * @returns {boolean} - 是否恢复成功
+   */
   trackTimerResume = (trackingId: string, timerId: string) => {
     const timers = this.dataStore.trackTimers[trackingId];
     if (timerId && timers && timers[timerId]) {
@@ -490,7 +581,13 @@ class GrowingIO implements GrowingIOType {
     return false;
   };
 
-  // 停止事件计时器并上报事件
+  /**
+   * 停止事件计时器并上报事件
+   * @param {string} trackingId - 实例 ID
+   * @param {string} timerId - 计时器 ID
+   * @param {any} properties - 事件属性
+   * @returns {boolean} - 是否上报成功
+   */
   trackTimerEnd = (trackingId: string, timerId: string, properties: any) => {
     const { dataCollect } = this.dataStore.getTrackerVds(trackingId);
     const timers = this.dataStore.trackTimers[trackingId];
@@ -536,7 +633,12 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 移除事件计时器
+  /**
+   * 移除事件计时器
+   * @param {string} trackingId - 实例 ID
+   * @param {string} timerId - 计时器 ID
+   * @returns {boolean} - 是否移除成功
+   */
   removeTimer = (trackingId: string, timerId: string) => {
     const timers = this.dataStore.trackTimers[trackingId];
     if (timerId && timers && timers[timerId]) {
@@ -548,12 +650,20 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 清除所有事件计时器
+  /**
+   * 清除所有事件计时器
+   * @param {string} trackingId - 实例 ID
+   */
   clearTrackTimer = (trackingId: string) => {
     this.dataStore.trackTimers[trackingId] = {};
   };
 
-  // 手动获取位置信息补发visit上报
+  /**
+   * 手动获取位置信息补发visit上报
+   * @param {string} trackingId - 实例 ID
+   * @param {number} latitude - 纬度
+   * @param {number} longitude - 经度
+   */
   setLocation = (trackingId: string, latitude: number, longitude: number) => {
     if (isEmpty(this.dataStore.locationData[trackingId])) {
       this.dataStore.locationData[trackingId] = {};
@@ -569,7 +679,9 @@ class GrowingIO implements GrowingIOType {
     }
   };
 
-  // 手动更新曝光监听（该方法会在曝光插件加载时被重写）
+  /**
+   * 手动更新曝光监听（该方法会在曝光插件加载时被重写）
+   */
   updateImpression = () => {
     consoleText(
       'updateImpression 错误! 请集成半自动埋点浏览插件后重试!',
@@ -577,13 +689,22 @@ class GrowingIO implements GrowingIOType {
     );
   };
 
-  // 获取A/B实验数据
+  /**
+   * 获取 A/B 实验数据
+   * @param {string} trackingId - 实例 ID
+   * @param {string | number} layerId - 层 ID
+   * @param {any} callback - 回调函数
+   */
   getABTest = (trackingId: string, layerId: string | number, callback: any) => {
     consoleText('获取ABTest数据错误! 请集成ABTest插件后重试!', 'error');
     niceCallback(callback, {});
   };
 
-  // 获取打通信息
+  /**
+   * 获取打通信息
+   * @param {string} trackingId - 实例 ID
+   * @returns {string} - 打通信息查询字符串
+   */
   getGioInfo = (trackingId: string) => {
     const { getUid, getUserId, getUserKey, getSessionId } = this.userStore;
     const {

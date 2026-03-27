@@ -84,7 +84,11 @@ class GioABTest {
     this.retryCount = 0;
   }
 
-  // 两个时长的初始化处理
+  /**
+   * 两个时长的初始化处理
+   * @param {number | string} requestInterval - 请求间隔
+   * @param {number | string} requestTimeout - 请求超时时间
+   */
   timeoutCheck = (
     requestInterval: number | string,
     requestTimeout: number | string
@@ -107,7 +111,9 @@ class GioABTest {
     }
   };
 
-  // 检查存储中的实验数据是否已过期
+  /**
+   * 检查存储中的实验数据是否已过期
+   */
   abtStorageCheck = () => {
     const { minipInstance }: any = this.growingIO;
     const storageKeys = minipInstance.minip?.getStorageInfoSync().keys || [];
@@ -130,7 +136,12 @@ class GioABTest {
     });
   };
 
-  // 生成存储的hash key
+  /**
+   * 生成存储的 hash key
+   * @param {string} trackingId - 实例 ID
+   * @param {string | number} layerId - 实验层 ID
+   * @returns {number} - hash 值
+   */
   getHashKey = (trackingId: string, layerId: string | number) => {
     const {
       userStore: { getUid },
@@ -139,7 +150,11 @@ class GioABTest {
     return hashCode(`${trackingId}#${projectId}#${getUid()}#${layerId}`, true);
   };
 
-  // 生成数据接口地址
+  /**
+   * 生成数据接口地址
+   * @param {string} trackingId - 实例 ID
+   * @param {string} abServerUrl - ABTest 服务地址
+   */
   generateUrl = (trackingId: string, abServerUrl: string) => {
     // 如果是延迟初始化的实例，当前又是首次进入设备，要补充把session存起来
     if (this.newDevice && !this.visitSids[trackingId]) {
@@ -160,7 +175,12 @@ class GioABTest {
     }
   };
 
-  // 获取实验调用
+  /**
+   * 获取实验调用
+   * @param {string} trackingId - 实例 ID
+   * @param {string | number} layerId - 实验层 ID
+   * @param {any} callback - 回调函数
+   */
   getABTest = (trackingId: string, layerId: string | number, callback: any) => {
     if (isEmpty(this.url[trackingId])) {
       this.generateUrl(trackingId, 'https://ab.growingio.com');
@@ -189,7 +209,13 @@ class GioABTest {
     }
   };
 
-  // 发起请求
+  /**
+   * 发起请求
+   * @param {string} trackingId - 实例 ID
+   * @param {string | number} layerId - 实验层 ID
+   * @param {any} originData - 原始数据
+   * @param {any} callback - 回调函数
+   */
   initiateRequest = (
     trackingId: string,
     layerId: string | number,
@@ -257,7 +283,13 @@ class GioABTest {
     });
   };
 
-  // 实验校验（决定是否上报命中事件）
+  /**
+   * 实验校验（决定是否上报命中事件）
+   * @param {string} trackingId - 实例 ID
+   * @param {any} responseData - 响应数据
+   * @param {any} originData - 原始数据
+   * @param {any} callback - 回调函数
+   */
   experimentVerify = (
     trackingId: string,
     responseData: any,
@@ -314,7 +346,11 @@ class GioABTest {
     niceCallback(callback, expData);
   };
 
-  // 构建实验命中事件
+  /**
+   * 构建实验命中事件
+   * @param {string} trackingId - 实例 ID
+   * @param {any} expData - 实验数据
+   */
   buildExperimentHitEvent = (trackingId: string, expData: any) => {
     const {
       dataStore: { eventContextBuilder, eventConverter }

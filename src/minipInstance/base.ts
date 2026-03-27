@@ -52,7 +52,9 @@ class BaseInstance implements MinipInstanceType {
     });
   }
 
-  // 通过hook setNavigationBarTitle方法优雅地获取客户设置的当前页面标题
+  /**
+   * 通过 hook setNavigationBarTitle 方法优雅地获取客户设置的当前页面标题
+   */
   hookSetTitle = () => {
     const originSetter = this.minip?.setNavigationBarTitle;
     const self = this;
@@ -81,7 +83,10 @@ class BaseInstance implements MinipInstanceType {
   /**
    * 业务相关
    */
-  // 保留当前页面，跳转到应用内的某个页面
+  /**
+   * 保留当前页面，跳转到应用内的某个页面
+   * @param {object} opt - 跳转参数
+   */
   navigateTo = (opt: {
     url: string;
     fail: () => void;
@@ -89,7 +94,10 @@ class BaseInstance implements MinipInstanceType {
     complete: () => void;
   }) => this.minip?.navigateTo(opt);
 
-  // 跳转到 tabBar 页面，并关闭其他所有非 tabBar 页面
+  /**
+   * 跳转到 tabBar 页面，并关闭其他所有非 tabBar 页面
+   * @param {object} opt - 跳转参数
+   */
   switchTab = (opt: {
     url: string;
     fail: () => void;
@@ -99,15 +107,24 @@ class BaseInstance implements MinipInstanceType {
     this.minip?.switchTab(opt);
   };
 
-  // 打开另一个小程序
+  /**
+   * 打开另一个小程序
+   * @param {NavigateToMiniProgramOption} opt - 跳转参数
+   */
   navigateToMiniProgram = (opt: NavigateToMiniProgramOption) =>
     this.minip?.navigateToMiniProgram(opt);
 
-  // 获取图片信息
+  /**
+   * 获取图片信息
+   * @param {any} opt - 图片参数
+   */
   getImageInfo = ({ src, success, fail, complete }: any) =>
     this.minip?.getImageInfo({ src, success, fail, complete });
 
-  // 采集曝光事件
+  /**
+   * 采集曝光事件
+   * @param {any} collectPage - 采集页面
+   */
   initImpression = (collectPage: any) => {
     this.growingIO.plugins?.gioImpressionTracking?.main(
       collectPage,
@@ -118,13 +135,19 @@ class BaseInstance implements MinipInstanceType {
   /**
    * 页面相关
    */
-  // 获取当前页面栈
+  /**
+   * 获取当前页面栈
+   * @returns {any} - 当前页面对象
+   */
   getCurrentPage = (): any => {
     // @ts-ignore 小程序自带api
     return niceTry(() => last(getCurrentPages())) || {};
   };
 
-  // 获取当前页面路由
+  /**
+   * 获取当前页面路由
+   * @returns {string} - 当前页面路由
+   */
   getCurrentPath = () => {
     const currentPage = this.getCurrentPage();
     // wx/my取route; swan取uri; tt取__route__; qq无值
@@ -133,7 +156,11 @@ class BaseInstance implements MinipInstanceType {
     );
   };
 
-  // 获取页面标题
+  /**
+   * 获取页面标题
+   * @param {any} page - 页面对象
+   * @returns {string} - 页面标题
+   */
   getPageTitle = (page) => {
     const platform = getPlainPlatform();
     let title = '';
@@ -205,6 +232,12 @@ class BaseInstance implements MinipInstanceType {
     return limitString(title);
   };
 
+  /**
+   * 从 TabBar 配置中获取页面标题
+   * @param {any} instConfig - 实例配置
+   * @param {string} pageRoute - 页面路由
+   * @returns {string} - 页面标题
+   */
   private _getTitleFromTabBar = (
     instConfig: any,
     pageRoute: string
@@ -218,7 +251,11 @@ class BaseInstance implements MinipInstanceType {
   /**
    * 存储相关
    */
-  // 同步获取存储数据
+  /**
+   * 同步获取存储数据
+   * @param {string} key - 键
+   * @returns {any} - 值
+   */
   getStorageSync = (key: string): any => {
     let value = this.minip?.getStorageSync(key);
     if (isObject(value) && value.expiredAt) {
@@ -231,7 +268,11 @@ class BaseInstance implements MinipInstanceType {
     return value;
   };
 
-  // 异步获取存储数据
+  /**
+   * 异步获取存储数据
+   * @param {string} key - 键
+   * @returns {Promise<string>} - 值
+   */
   getStorage = (key: string): Promise<string> => {
     return new Promise((resolve) => {
       this.minip?.getStorage({
@@ -242,7 +283,12 @@ class BaseInstance implements MinipInstanceType {
     });
   };
 
-  // 同步存储数据
+  /**
+   * 同步存储数据
+   * @param {string} key - 键
+   * @param {any} value - 值
+   * @param {string | number} [expiredAt] - 过期时间
+   */
   setStorageSync = (key: string, value: any, expiredAt?: string | number) => {
     if (expiredAt) {
       value = { value, expiredAt };
@@ -250,17 +296,27 @@ class BaseInstance implements MinipInstanceType {
     this.minip?.setStorageSync(key, value);
   };
 
-  // 异步存储数据
+  /**
+   * 异步存储数据
+   * @param {string} key - 键
+   * @param {any} value - 值
+   */
   setStorage = (key: string, value: any) => {
     this.minip?.setStorage({ key, data: value });
   };
 
-  // 同步移除指定数据
+  /**
+   * 同步移除指定数据
+   * @param {string} key - 键
+   */
   removeStorageSync = (key: string) => {
     this.minip?.removeStorageSync(key);
   };
 
-  // 异步移除指定数据
+  /**
+   * 异步移除指定数据
+   * @param {string} key - 键
+   */
   removeStorage = (key: string) => {
     this.minip?.removeStorage(key);
   };
@@ -268,7 +324,10 @@ class BaseInstance implements MinipInstanceType {
   /**
    * 网络相关
    */
-  // 获取网络类型
+  /**
+   * 获取网络类型
+   * @returns {Promise<{ networkType: string }>} - 网络类型
+   */
   getNetworkType = (): Promise<{ networkType: string }> => {
     const self = this;
     return new Promise((resolve) => {
@@ -282,7 +341,11 @@ class BaseInstance implements MinipInstanceType {
     });
   };
 
-  // 发起请求
+  /**
+   * 发起请求
+   * @param {object} opt - 请求参数
+   * @returns {any} - 请求任务
+   */
   request = ({
     url,
     data,
@@ -318,7 +381,10 @@ class BaseInstance implements MinipInstanceType {
   /**
    * 系统相关
    */
-  // 获取小程序系统信息
+  /**
+   * 获取小程序系统信息
+   * @returns {Promise<SystemInfo>} - 系统信息
+   */
   getSystemInfo = (): Promise<SystemInfo> => {
     const self = this;
     return new Promise((resolve) => {
@@ -332,14 +398,19 @@ class BaseInstance implements MinipInstanceType {
     });
   };
 
-  // 获取小程序设置
+  /**
+   * 获取小程序设置
+   * @returns {Promise<any>} - 小程序设置
+   */
   getSetting = () => {
     return new Promise((resolve) => {
       this.minip?.getSetting({ success: resolve, fail: resolve });
     });
   };
 
-  // 监听网络变更
+  /**
+   * 监听网络变更
+   */
   setNetworkStatusListener = () => {
     this.minip?.onNetworkStatusChange(({ networkType }) => {
       if (networkType) {

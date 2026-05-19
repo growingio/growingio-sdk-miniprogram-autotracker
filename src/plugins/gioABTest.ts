@@ -31,14 +31,15 @@ class GioABTest {
   public requestTimeout: number;
   // 分流服务请求地址
   public url: any;
-  // 接口重试计数
-  public retryCount: number;
   // 标记当前是否为新访问设备
   public newDevice: boolean;
   // 各个实例新设备进入时的sessionId；小程序没有刷新页面保持session的问题，所以存在内存里就可以
   public visitSids: any;
   constructor(public growingIO: GrowingIOType, options: any) {
     this.pluginVersion = '__PLUGIN_VERSION__';
+    // ABTest 支持两种地址配置：
+    // 1. 单实例场景可直接传字符串；
+    // 2. 多实例场景必须传对象，并按 trackingId 映射对应服务地址。
     const {
       abServerUrl = 'https://ab.growingio.com',
       requestInterval,
@@ -47,6 +48,14 @@ class GioABTest {
     this.timeoutCheck(requestInterval, requestTimeout);
     const { emitter, userStore } = this.growingIO;
     this.growingIO.getABTest = this.getABTest;
+    // 标记“本次冷启动拿到了新的 deviceId”。
+    // 这个状态不是给每次请求复用的普通开关，而是为了覆盖一个很具体的时序：
+    // 主实例已经在首访阶段生成了 session，但某个 trackingId 对应的 ABTest 实例是稍后才初始化的。
+    // 这时它还没来得及把“首访 session”写进 visitSids，就需要依赖 newDevice 在 generateUrl 时补一次。
+    this.newDevice = false;
+    // 这里只缓存“首访当下”的 session 快照，而不是当前实时 session。
+    // 后面请求里用 visitSids[trackingId] === getSessionId(trackingId) 来判断：
+    // 如果当前 session 还等于首访 session，服务端就应该把这次请求视为 newDevice。
     this.visitSids = {};
     emitter.on(EMIT_MSG.OPTION_INITIALIZED, () => {
       if (!isEmpty(abServerUrl)) {
@@ -67,8 +76,10 @@ class GioABTest {
       }
     });
     emitter.on(EMIT_MSG.UID_UPDATE, ({ newUId, oldUId }) => {
-      // 没有旧deviceId说明是第一次进入的新设备
+      // 没有旧 deviceId 说明这是当前冷启动里第一次拿到稳定身份。
+      // 这里顺手记录每个 trackingId 当下的 session，供后续 newDevice 判定使用。
       if (!oldUId && newUId) {
+        this.newDevice = true;
         if (isString(abServerUrl)) {
           const trackingId = this.growingIO.trackingId;
           const sId = userStore.getSessionId(trackingId);
@@ -81,7 +92,6 @@ class GioABTest {
         }
       }
     });
-    this.retryCount = 0;
   }
 
   /**
@@ -154,9 +164,13 @@ class GioABTest {
    * 生成数据接口地址
    * @param {string} trackingId - 实例 ID
    * @param {string} abServerUrl - ABTest 服务地址
+   * @description
+   * 这里除了拼接 URL，还会在“新设备首访 + 延迟初始化实例”的时序下补写 visitSids，
+   * 保证后续 newDevice 判定仍然能基于首访 session 快照工作。
    */
   generateUrl = (trackingId: string, abServerUrl: string) => {
-    // 如果是延迟初始化的实例，当前又是首次进入设备，要补充把session存起来
+    // 如果这个 trackingId 对应的实例是“首访之后才初始化”的，就不会走到上面的 UID_UPDATE 记录逻辑。
+    // 这里在首次生成 URL 时补写 visitSids，保证延迟初始化实例也能拿到首访 session 快照。
     if (this.newDevice && !this.visitSids[trackingId]) {
       // 这里要用userStore中的getSessionId，调用这个方法的时候实例肯定已经初始化了
       // 如果是新初始化可以通过getSessionId准确获取sessionExpires来生成准确的session值;
@@ -180,6 +194,8 @@ class GioABTest {
    * @param {string} trackingId - 实例 ID
    * @param {string | number} layerId - 实验层 ID
    * @param {any} callback - 回调函数
+   * @description
+   * 先读取本地缓存和请求节流标记；只有缓存为空或标记过期时，才真正向 AB 服务发请求。
    */
   getABTest = (trackingId: string, layerId: string | number, callback: any) => {
     if (isEmpty(this.url[trackingId])) {
@@ -215,13 +231,20 @@ class GioABTest {
    * @param {string | number} layerId - 实验层 ID
    * @param {any} originData - 原始数据
    * @param {any} callback - 回调函数
+   * @param {number} [retryCount=0] - 当前这一次请求链路已经消耗的重试次数
+   * @description
+   * retryCount 按单次请求链路递归传递，避免把重试次数挂在实例上导致后续无关请求也失去重试能力。
    */
   initiateRequest = (
     trackingId: string,
     layerId: string | number,
     originData: any,
-    callback: any
+    callback: any,
+    retryCount = 0
   ) => {
+    // retryCount 改成单次请求链路内传递，而不是挂在实例字段上。
+    // 这样一次 layerId 请求失败只会消耗自己这条链路的重试次数，
+    // 不会把整个 GioABTest 实例后面所有 getABTest 调用的重试额度一起耗尽。
     const {
       userStore: { getUid, getSessionId },
       dataStore,
@@ -237,6 +260,7 @@ class GioABTest {
         datasourceId: dataSourceId,
         distinctId: getUid(),
         layerId,
+        // 只有“当前 session 仍然等于首访 session 快照”时，才认为这次 AB 请求来自新设备首访。
         newDevice: this.visitSids[trackingId] === getSessionId(trackingId)
       },
       timeout: this.requestTimeout,
@@ -267,9 +291,14 @@ class GioABTest {
           niceCallback(callback, {});
         } else {
           // 其他失败情况重试
-          if (this.retryCount < 2) {
-            this.initiateRequest(trackingId, layerId, originData, callback);
-            this.retryCount += 1;
+          if (retryCount < 2) {
+            this.initiateRequest(
+              trackingId,
+              layerId,
+              originData,
+              callback,
+              retryCount + 1
+            );
           } else {
             consoleText(
               `获取ABTest数据失败! ${JSON.stringify(errMsg).slice(0, 30)}!`,

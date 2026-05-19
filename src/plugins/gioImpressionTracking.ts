@@ -249,12 +249,33 @@ class GioImpressionTracking {
       originObserver.disconnect();
     }
     // 创建一个新的监听
-    let observer = ['swan', 'jd', 'xhs'].includes(gioPlatform)
-      ? minipInstance.minip?.createIntersectionObserver(
-          collectTarget,
-          observerOption
-        )
-      : collectTarget.createIntersectionObserver(observerOption);
+    let observer;
+    if (['swan', 'jd', 'xhs'].includes(gioPlatform)) {
+      observer = minipInstance.minip?.createIntersectionObserver(
+        collectTarget,
+        observerOption
+      );
+    } else {
+      observer = niceTry(() =>
+        collectTarget.createIntersectionObserver(observerOption)
+      );
+      // 部分平台/框架组合（如支付宝 Taro）页面实例上可能不存在该方法，优先失败后退避到当前小程序环境
+      if (!observer) {
+        observer = niceTry(() =>
+          minipInstance.minip?.createIntersectionObserver(
+            collectTarget,
+            observerOption
+          )
+        );
+      }
+    }
+    if (!observer?.relativeToViewport) {
+      ut.consoleText(
+        `创建曝光监听失败，当前环境不支持 createIntersectionObserver: ${gioPlatform}`,
+        'warn'
+      );
+      return;
+    }
     observer = observer.relativeToViewport();
     // 不管原先是否创建过，直接覆盖（observerId会更新）
     this.observerIds[page.route][nodeId] = observer;
@@ -291,22 +312,21 @@ class GioImpressionTracking {
         if (dataProperties.eventName) {
           let sendTargets = [];
           if (dataset.gioImpSendto) {
+            const impSendTo = dataset.gioImpSendto;
             // 先尝试处理成数组
-            sendTargets = compact(
-              isArray(dataset.gioImpSendto)
-                ? dataset.gioImpSendto
-                : niceTry(() => JSON.parse(dataset.gioImpSendto)) || []
-            );
-            // 在尝试处理字符串
-            if (isEmpty(sendTargets)) {
-              niceTry(() =>
-                dataset.gioImpSendto.split(',').forEach((s: string) => {
+            if (isArray(impSendTo)) {
+              sendTargets = compact(impSendTo);
+            } else if (isString(impSendTo)) {
+              sendTargets = compact(niceTry(() => JSON.parse(impSendTo)) || []);
+              // 再尝试处理逗号分隔字符串
+              if (isEmpty(sendTargets)) {
+                impSendTo.split(',').forEach((s: string) => {
                   s = isString(s) && s.trim().replace('[', '').replace(']', '');
                   if (s) {
                     sendTargets.push(s);
                   }
-                })
-              );
+                });
+              }
             }
           }
           this.buildImpEvent(dataProperties, sendTargets);

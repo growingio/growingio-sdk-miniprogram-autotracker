@@ -5,10 +5,54 @@ import EMIT_MSG from '@@/constants/emitMsg';
 
 class PageEffects {
   public buildTabClickEvent: (tabItem: any) => void;
-  private prevEvent: any;
+  private prevEvent: Record<string, number>;
+  private prevEventByPage: WeakMap<object, Record<string, number>>;
   constructor(public growingIO: GrowingIOType) {
     this.prevEvent = {};
+    this.prevEventByPage = new WeakMap();
   }
+
+  /**
+   * 获取某个页面实例专属的去重桶
+   * @param {any} page - 页面实例
+   * @returns {Record<string, number> | null} - 当前页面对应的生命周期时间戳缓存
+   */
+  private getPrevEventBucket = (page: any) => {
+    if (!page || typeof page !== 'object') {
+      return null;
+    }
+    // 旧逻辑只按 onLoad/onShow 这类事件名去重，两个页面只要在 50ms 内连续触发同名生命周期，
+    // 后一个页面的事件就会被前一个页面“误伤”掉。
+    // 这里改成按页面实例分桶，优先保证“同一个页面的重复注入”被压掉，而不是全局粗暴去重。
+    const cached = this.prevEventByPage.get(page);
+    if (cached) return cached;
+    const bucket: Record<string, number> = {};
+    this.prevEventByPage.set(page, bucket);
+    return bucket;
+  };
+
+  /**
+   * 记录生命周期最近一次触发时间
+   * @param {any} page - 页面实例
+   * @param {PageHookLifeCircle} event - 生命周期事件名
+   * @param {number} timestamp - 事件触发时间
+   */
+  private setPrevEventTime = (
+    page: any,
+    event: PageHookLifeCircle,
+    timestamp: number
+  ) => {
+    const bucket = this.getPrevEventBucket(page);
+    if (bucket) {
+      bucket[event] = timestamp;
+      return;
+    }
+    // 极少数情况下拿不到稳定页面实例，这时再退回到 event + path 的弱去重兜底，
+    // 继续保留原先“防重复注入”的能力，但把误伤范围控制在同一路径内。
+    const path =
+      page?.route || page?.uri || page?.__route__ || page?.$page?.fullPath || '';
+    this.prevEvent[`${event}:${path}`] = timestamp;
+  };
 
   /**
    * Page 生命周期处理主函数
@@ -37,13 +81,6 @@ class PageEffects {
       }
     }: GrowingIOType = this.growingIO;
     const { currentPage } = eventHooks;
-    if (
-      // 防止重写页面后可能出现重复的事件
-      this.prevEvent[event] &&
-      Date.now() - Number(this.prevEvent[event]) < 50
-    ) {
-      return;
-    }
     if (!page) {
       page = minipInstance.getCurrentPage();
     }
@@ -52,6 +89,16 @@ class PageEffects {
     }
     const path =
       page.route || page.uri || page.__route__ || page?.$page?.fullPath || '';
+    const dedupeKey = `${event}:${path}`;
+    const bucket = this.getPrevEventBucket(page);
+    const prevEventTime = bucket ? bucket[event] : this.prevEvent[dedupeKey];
+    if (
+      // 防止重写页面后可能出现重复的事件，但不要让不同页面实例互相吞事件
+      prevEventTime &&
+      eventTime - Number(prevEventTime) < 50
+    ) {
+      return false;
+    }
     emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
       event: `Page ${event}`,
       timestamp: eventTime,
@@ -60,7 +107,7 @@ class PageEffects {
     if (vdsConfig.debug) {
       console.log('Page:', path, '#', event, eventTime);
     }
-    this.prevEvent[event] = Date.now();
+    this.setPrevEventTime(page, event, eventTime);
     const pageListeners = platformConfig.listeners.page;
     // 向插件广播事件
     emitter.emit(EMIT_MSG.ON_COMPOSE_BEFORE, {
@@ -166,6 +213,7 @@ class PageEffects {
     if (currentPage.currentLifecycle === 'onShowEnd') {
       currentPage.lifeBeforeShow = false;
     }
+    return true;
   };
 
   /**

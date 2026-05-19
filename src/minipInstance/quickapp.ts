@@ -7,7 +7,6 @@ import BaseImplements from './base';
 import device from '@system.device';
 import EMIT_MSG from '@@/constants/emitMsg';
 import fetch from '@system.fetch';
-import image from '@system.image';
 import network from '@system.network';
 import router from '@system.router';
 import share from '@system.share';
@@ -49,26 +48,6 @@ class QuickApp extends BaseImplements {
     const { source } = app.getInfo();
     this.appSource = source || {};
     return this.appSource;
-  };
-
-  // 保留当前页面，跳转到应用内的某个页面（重写为空）
-  navigateTo = () => {}; // eslint-disable-line
-
-  // 跳转到 tabBar 页面，并关闭其他所有非 tabBar 页面（重写为空）
-  switchTab = () => {}; // eslint-disable-line
-
-  // 打开另一个小程序（重写为空）
-  navigateToMiniProgram = () => {}; // eslint-disable-line
-
-  // 监听小程序切前台事件（重写为空）
-  onAppShow = () => {}; // eslint-disable-line
-
-  // 监听小程序切后台事件（重写为空）
-  onAppHide = () => {}; // eslint-disable-line
-
-  // 获取图片信息
-  getImageInfo = ({ src, success, fail, complete }: any) => {
-    return image?.getImageInfo({ uri: src, success, fail, complete });
   };
 
   // 采集曝光事件
@@ -147,17 +126,6 @@ class QuickApp extends BaseImplements {
   // 同步获取存储数据
   getStorageSync = () => '';
 
-  // 异步获取存储数据
-  getStorage = async (key: string): Promise<string> => {
-    return await new Promise((resolve) => {
-      storage?.get({
-        key,
-        success: (res) => resolve(res),
-        fail: () => resolve(null)
-      });
-    });
-  };
-
   // 同步存储数据
   setStorageSync = () => {}; // eslint-disable-line
 
@@ -166,11 +134,6 @@ class QuickApp extends BaseImplements {
 
   // 同步移除指定数据
   removeStorageSync = () => {}; // eslint-disable-line
-
-  // 异步移除指定数据
-  removeStorage = (key: string) => {
-    storage?.delete({ key });
-  };
 
   /**
    * 网络相关
@@ -186,7 +149,10 @@ class QuickApp extends BaseImplements {
           self.network = res;
           resolve(res);
         },
-        fail: () => resolve(null)
+        fail: () => {
+          self.network = { __gioFailed: true };
+          resolve(self.network as any);
+        }
       });
     });
   };
@@ -213,7 +179,10 @@ class QuickApp extends BaseImplements {
           self.systemInfo = info;
           resolve(info);
         },
-        fail: () => resolve(null)
+        fail: () => {
+          self.systemInfo = { __gioFailed: true };
+          resolve(self.systemInfo as any);
+        }
       });
     });
   };
@@ -223,6 +192,9 @@ class QuickApp extends BaseImplements {
     network.subscribe({
       callback: (data) => {
         if (data.type) {
+          if (!this.network || typeof this.network !== 'object') {
+            this.network = {};
+          }
           this.network.networkType = data.type;
         }
       }

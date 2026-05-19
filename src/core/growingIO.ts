@@ -55,7 +55,6 @@ class GrowingIO implements GrowingIOType {
   public gioFramework: FRAMEWORKS;
   public sdkVersion: string;
   public inPlugin: boolean;
-  public subKey: string;
   public platformConfig: any;
   public gioSDKInitialized: boolean;
   public vdsConfig: OriginOptions;
@@ -532,6 +531,7 @@ class GrowingIO implements GrowingIOType {
           this.dataStore.trackTimers[trackingId] = {};
         }
         this.dataStore.trackTimers[trackingId][timerId] = {
+          ended: false,
           eventName,
           leng: 0,
           start: +Date.now()
@@ -554,6 +554,9 @@ class GrowingIO implements GrowingIOType {
     const timers = this.dataStore.trackTimers[trackingId];
     if (timerId && timers && timers[timerId]) {
       const timer = timers[timerId];
+      if (timer.ended) {
+        return false;
+      }
       if (timer.start) {
         timer.leng = timer.leng + (+Date.now() - timer.start);
       }
@@ -573,6 +576,9 @@ class GrowingIO implements GrowingIOType {
     const timers = this.dataStore.trackTimers[trackingId];
     if (timerId && timers && timers[timerId]) {
       const timer = timers[timerId];
+      if (timer.ended) {
+        return false;
+      }
       if (timer.start === 0) {
         timer.start = +Date.now();
       }
@@ -592,9 +598,13 @@ class GrowingIO implements GrowingIOType {
     const { dataCollect } = this.dataStore.getTrackerVds(trackingId);
     const timers = this.dataStore.trackTimers[trackingId];
     if (timerId && timers && timers[timerId]) {
+      const timer = timers[timerId];
+      if (timer.ended) {
+        consoleText('指定计时器已结束，请勿重复调用!', 'warn');
+        return false;
+      }
       if (dataCollect) {
         const maxEnd = 60 * 60 * 24 * 1000;
-        const timer = timers[timerId];
         if (timer.start !== 0) {
           const shortCut = +Date.now() - timer.start;
           timer.leng = shortCut > 0 ? timer.leng + shortCut : 0;
@@ -621,12 +631,15 @@ class GrowingIO implements GrowingIOType {
           event['&&sendTo'] = properties['&&sendTo'];
         }
         eventInterceptor(event);
+        timer.ended = true;
+        timer.start = 0;
         return true;
       } else {
-        consoleText('指定实例未开启数据采集，计时器已移除，请检查!', 'error');
+        consoleText('指定实例未开启数据采集，计时器已停止，请检查!', 'error');
+        timer.ended = true;
+        timer.start = 0;
         return false;
       }
-      this.removeTimer(trackingId, timerId);
     } else {
       consoleText('未查询到指定计时器，请检查!', 'error');
       return false;
@@ -669,10 +682,11 @@ class GrowingIO implements GrowingIOType {
       this.dataStore.locationData[trackingId] = {};
     }
     const ld = this.dataStore.locationData[trackingId];
-    const verifyLT = (o: number) => o >= -180 && o <= 180;
+    const verifyLatitude = (o: number) => o >= -90 && o <= 90;
+    const verifyLongitude = (o: number) => o >= -180 && o <= 180;
     if (
-      verifyLT(latitude) &&
-      verifyLT(longitude) &&
+      verifyLatitude(latitude) &&
+      verifyLongitude(longitude) &&
       (ld.latitude !== latitude || ld.longitude !== longitude)
     ) {
       this.dataStore.locationData[trackingId] = { latitude, longitude };

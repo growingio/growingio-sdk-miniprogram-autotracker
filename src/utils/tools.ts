@@ -245,6 +245,24 @@ export const splitPath = (fullPath?: string): [string | undefined, string] => {
 };
 
 /**
+ * 归一化页面路径，用于按页面路径做稳定分桶。
+ *
+ * 与 normalPath 不同：normalPath 会补前导 `/`，用于对外展示或拼接；
+ * normalizePath 会去掉 query、前导 `/`，并收敛已知的平台路由后缀，
+ * 用于内部比较和作为 map key。
+ *
+ * @param {string} [path] - 原始路径，可能带 query 或前导 `/`
+ * @returns {string} - 去掉 query、前导 `/` 和已知路由后缀后的路径
+ */
+export const normalizePath = (path?: string): string => {
+  const [purePath] = splitPath(path);
+  const normalizedPath = purePath?.replace(/^\/+/, '') || '';
+  // 支付宝 observer 的 pageURL 可能带 .html，而页面生命周期 route 不带；
+  // 收敛后缀，避免同一页被分到两个 pagePerf 桶里。
+  return normalizedPath.replace(/\.html$/, '');
+};
+
+/**
  * 规范化路径，确保以 '/' 开头
  * @param {string} path - 路径
  * @returns {string} - 规范化后的路径
@@ -255,6 +273,36 @@ export const normalPath = (path: string): string => {
   } else {
     return '';
   }
+};
+
+/**
+ * 安全计算耗时，避免不同时间轴相减产生负数。
+ *
+ * 适用于“结束时间固定，开始时间可能来自不同来源”的场景：
+ * 1. preferredStart 有效且不晚于 end 时，优先使用它
+ * 2. fallbackStart 有效且不晚于 end 时，使用兜底起点
+ * 3. 都不可用时返回 0，表示已兜底但不输出负值
+ *
+ * @param {number} [end] - 结束时间
+ * @param {number} [preferredStart] - 首选开始时间
+ * @param {number} [fallbackStart] - 兜底开始时间
+ * @returns {number | undefined} - 安全耗时；没有结束时间时返回 undefined
+ */
+export const getSafeDuration = (
+  end?: number,
+  preferredStart?: number,
+  fallbackStart?: number
+) => {
+  if (typeof end !== 'number') {
+    return undefined;
+  }
+  if (typeof preferredStart === 'number' && preferredStart <= end) {
+    return end - preferredStart;
+  }
+  if (typeof fallbackStart === 'number' && fallbackStart <= end) {
+    return end - fallbackStart;
+  }
+  return 0;
 };
 
 /**

@@ -114,10 +114,9 @@ class GioPerformance {
     }
     // 处理过长的小数，保留 0 位
     ut.forEach(attributes, (v, k) => {
-      if (Number.isNaN(v) || ut.isNil(v) || Number(v) < 0) {
-        attributes[k] = 0;
-      }
-      attributes[k] = ut.fixed(v, 0);
+      const value =
+        Number.isNaN(v) || ut.isNil(v) || Number(v) < 0 ? 0 : v;
+      attributes[k] = ut.fixed(value, 0);
     });
     let event = {
       eventType: 'CUSTOM',

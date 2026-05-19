@@ -201,13 +201,18 @@ class GioTaroAdapter {
     this.defineProperty(this.taro.hooks, 'call', function (...args) {
       const argsArray = Array.from(args);
       const [msgType] = argsArray;
+      let lifecycleContext;
 
       // 1. 处理生命周期
       if (msgType === 'getLifecycle') {
-        self.handleTaro3Lifecycle(argsArray);
+        lifecycleContext = self.handleTaro3Lifecycle(argsArray);
       }
 
       const result = originCall.apply(this, argsArray);
+      const finalResult = self.wrapTaro3LifecycleResult(
+        result,
+        lifecycleContext
+      );
 
       // 2. 处理 modifyPageObject (分享、收藏等)
       if (msgType === 'modifyPageObject') {
@@ -219,8 +224,42 @@ class GioTaroAdapter {
         self.handleTaro3DispatchEvent(argsArray[1], argsArray[2]);
       }
 
-      return result;
+      return finalResult;
     });
+  };
+
+  /**
+   * 让 Taro3 hooks.call 链路在 originCall 完成后立即补发 Page xxxEnd。
+   *
+   * 历史上这里曾根据 result 类型分两种处理：
+   *   - 非函数返回值：originCall 已经跑完生命周期 → 同步发 End
+   *   - 函数返回值：把它包一层，等函数被框架后续调用时再发 End
+   *
+   * 但实测发现"包一层等函数被调"的策略在 Taro 3.x 部分版本的**热启动**场景下
+   * 会出问题：框架在 App 回到前台时调用 hooks.call('getLifecycle', component,
+   * 'onShow', args)，hooks.call 返回的是一个 deferred 函数，但框架后续并不会
+   * 真正调用这个函数（走了不同的恢复路径）。结果就是 Page.onShowEnd 永远不发，
+   * APM 等不到生命周期门槛，热启动事件永远不发出。
+   *
+   * 冷启动的 onLoad/onReady 通常走非函数返回值那一支，所以冷启动正常；只有
+   * 热启动的 onShow 容易踩到 deferred 函数那一支。
+   *
+   * 因此这里改成**统一同步发 End**：originCall 一返回就发 End，不再依赖
+   * deferred 函数是否被调用。代价是若 result 是 deferred 函数，End 时间戳
+   * 比真实业务生命周期结束略早（差一次同步任务的执行时间），但 APM 时长统计
+   * 不依赖这种亚毫秒级精度，可接受。
+   */
+  wrapTaro3LifecycleResult = (result: any, lifecycleContext: any) => {
+    if (!lifecycleContext?.handled) {
+      return result;
+    }
+
+    this.emitTaro3PageLifecycleEnd(
+      lifecycleContext.page,
+      lifecycleContext.lifetime,
+      lifecycleContext.lifecycleArgs
+    );
+    return result;
   };
 
   /**
@@ -246,11 +285,53 @@ class GioTaroAdapter {
       // 有路由地址的才是页面的生命周期（支付宝在ApponShow时也会拿到，所以要再判标记）
       const page = minipInstance.getCurrentPage();
       if (page.route && !this.inAppLifecycle) {
-        ut.niceTry(() =>
+        const handled = ut.niceTry(() =>
           eventHooks.pageEffects.main(page, lifetime, argsArray[1])
         );
+        return {
+          handled,
+          page,
+          lifetime,
+          lifecycleArgs: argsArray[1]
+        };
       }
     }
+    return undefined;
+  };
+
+  /**
+   * 补齐 Taro3 hooks.call 链路的 Page xxxEnd 生命周期。
+   *
+   * Taro2、Taro3 Vue2、低版本 Taro3 React 都会走原生 Page 包装，
+   * `lifeFcEffectsFn` 会自动广播 `Page onReadyEnd/onShowEnd`。
+   * 但新版本 Taro3 React/Vue3 只通过 `hooks.call('getLifecycle')`
+   * 进入 `pageEffects.main`，这条链路原本只广播 `Page onReady/onShow`。
+   *
+   * APM 的发送门槛依赖 `onReadyEnd`，热启动依赖 `onShowEnd`；
+   * 因此这里在确认 pageEffects 未被去重吞掉后，
+   * 由 wrapTaro3LifecycleResult 保证补发同一轮 End 事件。
+   */
+  emitTaro3PageLifecycleEnd = (
+    page: any,
+    lifetime: string,
+    lifecycleArgs: any
+  ) => {
+    let args = [];
+    if (Array.isArray(lifecycleArgs)) {
+      args = lifecycleArgs;
+    } else if (lifecycleArgs !== undefined) {
+      args = [lifecycleArgs];
+    }
+
+    this.growingIO.emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
+      event: `Page ${lifetime}End`,
+      timestamp: Date.now(),
+      params: {
+        page,
+        instance: page,
+        arguments: args
+      }
+    });
   };
 
   /**

@@ -1,9 +1,7 @@
 import { GrowingIOType } from '@@/types/growingIO';
 import {
   AppSource,
-  Location,
   MinipInstanceType,
-  NavigateToMiniProgramOption,
   SystemInfo
 } from '@@/types/minipInstance';
 import { PLATFORMS } from '@@/types/platforms';
@@ -31,7 +29,6 @@ class BaseInstance implements MinipInstanceType {
   readonly minip: any = getPlainMinip('__GIO_PLATFORM__');
   public platform: PLATFORMS;
   public scnPrefix: string;
-  public location: Location;
   public appSource: AppSource;
   public systemInfo: any;
   public network: any;
@@ -79,47 +76,6 @@ class BaseInstance implements MinipInstanceType {
   };
 
   // -----以下为除快应用以外的小程序通用的实现，由各平台端继承并差异化实现-----
-
-  /**
-   * 业务相关
-   */
-  /**
-   * 保留当前页面，跳转到应用内的某个页面
-   * @param {object} opt - 跳转参数
-   */
-  navigateTo = (opt: {
-    url: string;
-    fail: () => void;
-    success: () => void;
-    complete: () => void;
-  }) => this.minip?.navigateTo(opt);
-
-  /**
-   * 跳转到 tabBar 页面，并关闭其他所有非 tabBar 页面
-   * @param {object} opt - 跳转参数
-   */
-  switchTab = (opt: {
-    url: string;
-    fail: () => void;
-    success: () => void;
-    complete: () => void;
-  }) => {
-    this.minip?.switchTab(opt);
-  };
-
-  /**
-   * 打开另一个小程序
-   * @param {NavigateToMiniProgramOption} opt - 跳转参数
-   */
-  navigateToMiniProgram = (opt: NavigateToMiniProgramOption) =>
-    this.minip?.navigateToMiniProgram(opt);
-
-  /**
-   * 获取图片信息
-   * @param {any} opt - 图片参数
-   */
-  getImageInfo = ({ src, success, fail, complete }: any) =>
-    this.minip?.getImageInfo({ src, success, fail, complete });
 
   /**
    * 采集曝光事件
@@ -269,21 +225,6 @@ class BaseInstance implements MinipInstanceType {
   };
 
   /**
-   * 异步获取存储数据
-   * @param {string} key - 键
-   * @returns {Promise<string>} - 值
-   */
-  getStorage = (key: string): Promise<string> => {
-    return new Promise((resolve) => {
-      this.minip?.getStorage({
-        key,
-        success: ({ data }) => resolve(data),
-        fail: () => resolve('')
-      });
-    });
-  };
-
-  /**
    * 同步存储数据
    * @param {string} key - 键
    * @param {any} value - 值
@@ -314,14 +255,6 @@ class BaseInstance implements MinipInstanceType {
   };
 
   /**
-   * 异步移除指定数据
-   * @param {string} key - 键
-   */
-  removeStorage = (key: string) => {
-    this.minip?.removeStorage(key);
-  };
-
-  /**
    * 网络相关
    */
   /**
@@ -336,7 +269,11 @@ class BaseInstance implements MinipInstanceType {
           self.network = r;
           resolve(r);
         },
-        fail: () => resolve(null)
+        fail: () => {
+          // 元数据获取失败时使用占位对象，避免首批事件永久阻塞。
+          self.network = { __gioFailed: true };
+          resolve(self.network as any);
+        }
       });
     });
   };
@@ -393,18 +330,12 @@ class BaseInstance implements MinipInstanceType {
           self.systemInfo = r;
           resolve(r);
         },
-        fail: () => resolve(null)
+        fail: () => {
+          // 元数据获取失败时使用占位对象，允许事件按缺省字段继续发送。
+          self.systemInfo = { __gioFailed: true };
+          resolve(self.systemInfo as any);
+        }
       });
-    });
-  };
-
-  /**
-   * 获取小程序设置
-   * @returns {Promise<any>} - 小程序设置
-   */
-  getSetting = () => {
-    return new Promise((resolve) => {
-      this.minip?.getSetting({ success: resolve, fail: resolve });
     });
   };
 
@@ -414,6 +345,9 @@ class BaseInstance implements MinipInstanceType {
   setNetworkStatusListener = () => {
     this.minip?.onNetworkStatusChange(({ networkType }) => {
       if (networkType) {
+        if (!this.network || !isObject(this.network)) {
+          this.network = {};
+        }
         this.network.networkType = networkType;
       }
     });

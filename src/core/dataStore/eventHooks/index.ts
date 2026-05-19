@@ -110,25 +110,47 @@ class EventHooks implements EventHooksType {
    * @returns {any} - 结果
    */
   lifeFcEffectsFn = (instance, args, cType, eventName, result = undefined) => {
-    // 创建参数数组副本
+    const argsArray = this.getLifeArgs(args, result);
+    this.runLifeEffects(instance, argsArray, cType, eventName);
+    this.emitLifeEnd(instance, argsArray, cType, eventName);
+    return result;
+  };
+
+  /**
+   * 构造生命周期透传参数。
+   *
+   * 分享类生命周期可能会把处理后的 result 追加进去；
+   * 普通生命周期只需要保留原始参数数组。
+   */
+  getLifeArgs = (args, result = undefined) => {
     const argsArray =
       typeOf(args) === 'array' ? Array.prototype.slice.call(args) : [];
-    // 如果有结果，添加到参数列表
     if (!isEmpty(result)) {
       argsArray.push(result);
     }
+    return argsArray;
+  };
 
-    // 执行effects
+  /**
+   * 执行 SDK 侧生命周期 effects，并广播 Page/App xxx。
+   *
+   * xxxEnd 不能在这里发，因为 APM 需要真实生命周期方法执行完成后的时间。
+   */
+  runLifeEffects = (instance, argsArray, cType, eventName) =>
     this[`def${cType}Cbs`][eventName].apply(instance, argsArray);
 
-    // 广播生命周期
+  /**
+   * 广播生命周期结束事件。
+   *
+   * 这个时间点必须在用户原始生命周期方法执行之后，
+   * 否则 APM 的 onShowEnd/onReadyEnd 会少算业务生命周期耗时。
+   */
+  emitLifeEnd = (instance, argsArray, cType, eventName) => {
     this.growingIO.emitter.emit(EMIT_MSG.MINIP_LIFECYCLE, {
       event: `${cType} ${eventName}End`,
       timestamp: Date.now(),
       params: { instance, arguments: Array.from(argsArray) }
     });
-
-    return result;
   };
 
   /**
@@ -227,9 +249,11 @@ class EventHooks implements EventHooksType {
           self.lifeFcEffectsFn(this, args, cType, eventName, result);
         }
       } else {
-        // 其他生命周期事件：先执行回调，再执行原方法
-        self.lifeFcEffectsFn(this, args, cType, eventName);
+        // 普通生命周期：先广播 xxx，再执行用户原方法，最后广播 xxxEnd。
+        const argsArray = self.getLifeArgs(args);
+        self.runLifeEffects(this, argsArray, cType, eventName);
         result = method.apply(this, args);
+        self.emitLifeEnd(this, argsArray, cType, eventName);
       }
 
       return result;
@@ -381,7 +405,7 @@ class EventHooks implements EventHooksType {
     const self = this;
     this.appHandlers.forEach((handlerName: string) => {
       this.defAppCbs[handlerName] = function (...args) {
-        self.appEffects.main(handlerName, args);
+        return self.appEffects.main(handlerName, args);
       };
     });
   };
@@ -393,7 +417,7 @@ class EventHooks implements EventHooksType {
     const self = this;
     this.pageHandlers.forEach((handlerName: string) => {
       this.defPageCbs[handlerName] = function (...args) {
-        self.pageEffects.main(this, handlerName, args);
+        return self.pageEffects.main(this, handlerName, args);
       };
     });
   };

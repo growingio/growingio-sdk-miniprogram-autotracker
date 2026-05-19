@@ -25,6 +25,8 @@ class Uploader implements UploaderType {
   public retryIds: any;
   // 请求中的请求数
   public requestingNum: number;
+  // 按实例复用的节流发送器
+  private throttledBatchInvoke: any;
 
   constructor(public growingIO: GrowingIOType) {
     this.hoardingQueue = {};
@@ -33,6 +35,7 @@ class Uploader implements UploaderType {
     this.retryLimit = 2;
     this.retryIds = {};
     this.requestingNum = 0;
+    this.throttledBatchInvoke = {};
     this.growingIO.emitter.on(
       EMIT_MSG.ON_SEND_BEFORE,
       ({ eventsQueue, requestData, trackingId }) => {
@@ -130,7 +133,7 @@ class Uploader implements UploaderType {
       } else {
         // 有节流的批量发送(1秒钟之内产生的请求只会组团发送一次)
         const { uploadInterval } = this.growingIO.dataStore.getTrackerVds(tid);
-        throttle(this.batchInvoke, uploadInterval, false, false)(tid);
+        this.getThrottledBatchInvoke(tid, uploadInterval)(tid);
       }
       // 发起visit请求时把存储里的originalSource删掉
       const hasVisit = queues.some((e) => e.eventType === 'VISIT');
@@ -156,6 +159,36 @@ class Uploader implements UploaderType {
       }
     }
   };
+
+  /**
+   * 获取按实例复用的节流发送器
+   * @param {string} trackingId - 实例 ID
+   * @param {number} uploadInterval - 发送间隔
+   * @returns {(trackingId: string) => void} - 节流后的发送器
+   */
+  getThrottledBatchInvoke = (trackingId: string, uploadInterval: number) => {
+    const cached = this.throttledBatchInvoke[trackingId];
+    if (!cached || cached.uploadInterval !== uploadInterval) {
+      this.throttledBatchInvoke[trackingId] = {
+        uploadInterval,
+        invoke: throttle(
+          (tid: string) => this.batchInvoke(tid),
+          uploadInterval,
+          false,
+          false
+        )
+      };
+    }
+    return this.throttledBatchInvoke[trackingId].invoke;
+  };
+
+  /**
+   * 获取小程序请求返回中的 HTTP 状态码
+   * @param {any} result - 请求返回对象
+   * @returns {number} - 兼容不同平台字段后的状态码
+   */
+  getHttpCode = (result: any) =>
+    Number(result?.statusCode ?? result?.status ?? result?.code);
 
   /**
    * 批量发送无延时(强制发送)
@@ -218,6 +251,17 @@ class Uploader implements UploaderType {
     const { minipInstance, dataStore, emitter, plugins } = this.growingIO;
     const { compress, requestTimeout } = dataStore.getTrackerVds(trackingId);
     this.requestingNum += 1;
+    const requestErrorFn = (result: any) => {
+      eventsQueue.forEach((o: any) => {
+        this.requestFailFn(o);
+      });
+      consoleText(`请求失败!${JSON.stringify(result)}`, 'error');
+      emitter.emit(EMIT_MSG.ON_SEND_ERROR, {
+        eventsQueue,
+        requestData,
+        trackingId
+      });
+    };
     // 根据设置拼装最后请求数据
     const header: any = {
       // !!!京东小程序在7月4号的发版中，ios全匹配了application/json;导致我们的请求没法发出去，这里做一下兼容，等他们修复上线以后改回已注释的部分
@@ -243,18 +287,13 @@ class Uploader implements UploaderType {
       method: 'POST',
       data: compressData,
       timeout: requestTimeout,
-      fail: (result: any) => {
-        if (![200, 204].includes(result.code)) {
-          eventsQueue.forEach((o: any) => {
-            this.requestFailFn(o);
-          });
-          consoleText(`请求失败!${JSON.stringify(result)}`, 'error');
-          emitter.emit(EMIT_MSG.ON_SEND_ERROR, {
-            eventsQueue,
-            requestData,
-            trackingId
-          });
+      success: (result: any) => {
+        if (![200, 204].includes(this.getHttpCode(result))) {
+          requestErrorFn(result);
         }
+      },
+      fail: (result: any) => {
+        requestErrorFn(result);
       },
       complete: (args: any) => {
         this.requestingNum -= 1;
@@ -271,6 +310,11 @@ class Uploader implements UploaderType {
   /**
    * 请求失败的回调
    * @param {EXTEND_EVENT} event - 失败的事件
+   * @description
+   * 统一处理单条事件的重试入队：
+   * 1. 兼容 forceLogin 积压队列首次 flush 时 requestQueue 还没初始化的情况；
+   * 2. 避免 batchInvoke 替换数组引用后把事件写回旧队列；
+   * 3. 避免同一个 requestId 被多个失败回调重复塞回队列。
    */
   requestFailFn = (event: EXTEND_EVENT) => {
     // 把重试的请求进行计数，超过重试上限的会被丢弃
@@ -279,16 +323,33 @@ class Uploader implements UploaderType {
     }
     this.retryIds[event.requestId] += 1;
     // 发送失败的事件会重新推入请求队列
-    const eventExist = this.requestQueue[event.trackingId].some(
-      (o) => o.requestId === event.requestId
-    );
+    const queue =
+      this.requestQueue[event.trackingId] ??
+      (this.requestQueue[event.trackingId] = []);
+    const eventExist = queue.some((o) => o.requestId === event.requestId);
     if (!eventExist) {
-      // 延迟半秒后再推入请求队列，给网络一点恢复时间
+      // 延迟半秒后再推入请求队列，给网络一点恢复时间。
+      // 这里不能继续闭包持有上面的 queue：
+      // batchInvoke 在发送时会直接替换 this.requestQueue[trackingId] 的数组引用，
+      // 如果定时器晚于那次替换执行，往旧数组 push 只会把事件丢进一个“脱离主流程”的废弃队列里。
       let t = setTimeout(() => {
-        if (!isEmpty(this.requestQueue[event.trackingId])) {
-          this.requestQueue[event.trackingId].push(event);
+        // 所以这里必须按执行时机重新读取当前 requestQueue，并再次做一次去重判断：
+        // 一方面避免写回旧数组，另一方面避免事件已经被别的重试流程补回后又重复入队。
+        const currentQueue =
+          this.requestQueue[event.trackingId] ??
+          (this.requestQueue[event.trackingId] = []);
+        const currentEventExist = currentQueue.some(
+          (o) => o.requestId === event.requestId
+        );
+        if (currentEventExist) {
+          clearTimeout(t);
+          t = null;
+          return;
+        }
+        if (!isEmpty(currentQueue)) {
+          currentQueue.push(event);
         } else {
-          this.requestQueue[event.trackingId].push(event);
+          currentQueue.push(event);
           this.initiateRequest(event.trackingId);
         }
         clearTimeout(t);

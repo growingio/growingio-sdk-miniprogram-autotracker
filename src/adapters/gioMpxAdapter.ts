@@ -85,6 +85,23 @@ class GioMpxAdapter {
   };
 
   /**
+   * 执行 MPX 注入的 App 生命周期 effects，并补齐 App xxxEnd。
+   *
+   * MPX 这里没有走 EventHooks.lifeFcEffects 包装链路，如果只调用
+   * appEffects.main，就只会广播 App onShow/onHide，不会有 App onShowEnd。
+   * APM 热启动按 `Page onReadyEnd/onShowEnd - App onShowEnd` 计算，
+   * 所以必须在这条适配链路里手动补齐 End 事件。
+   */
+  private runAppLifecycle = (
+    instance: any,
+    eventName: string,
+    args: any[]
+  ) => {
+    globalEventHooks?.appEffects?.main(eventName, args);
+    globalEventHooks?.emitLifeEnd?.(instance, args, 'App', eventName);
+  };
+
+  /**
    * 通过 mpx.injectMixins API 注入 App 生命周期 mixin
    * 确保 SDK 能够正确发送 visit 等基于生命周期的事件
    */
@@ -100,9 +117,10 @@ class GioMpxAdapter {
 
     // 在闭包中保存 dataStore 引用，确保 mixin 中可以访问
     const dataStore = this.growingIO.dataStore;
+    const adapter = this;
     const appLifecycleMixin = {
       onLaunch(this: any, ...args: any[]) {
-        globalEventHooks?.appEffects?.main('onLaunch', args);
+        adapter.runAppLifecycle(this, 'onLaunch', args);
       },
       onShow(this: any, ...args: any[]) {
         // mpx 中 Page onShow 在 App onShow 之后执行
@@ -112,10 +130,10 @@ class GioMpxAdapter {
         if (dataStore.lastCloseTime && dataStore.shareOut) {
           dataStore.toggleShareOut(false);
         }
-        globalEventHooks?.appEffects?.main('onShow', args);
+        adapter.runAppLifecycle(this, 'onShow', args);
       },
       onHide(this: any, ...args: any[]) {
-        globalEventHooks?.appEffects?.main('onHide', args);
+        adapter.runAppLifecycle(this, 'onHide', args);
       }
     };
 

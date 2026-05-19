@@ -411,10 +411,16 @@ class DataStore implements DataStoreType {
     // idMapping配置项兼容处理
     if (configs.enableIdMapping && !configs.idMapping) {
       configs.idMapping = true;
-      // 没有开启IDMapping的时候要把userKey清掉，防止之前有数被带到上报数据里
-      if (!configs.idMapping) {
-        this.growingIO.userStore.setUserKey(trackingId, '');
-      }
+    }
+    // enableIdMapping 是旧配置名，兼容时只表达“显式开启 idMapping”。
+    // 这里不能把 userKey 清理写进上面的兼容分支里：
+    // 1. enableIdMapping=true 时，最终语义是强制开启 idMapping；
+    // 2. 真正需要清理 userKey 的是“最终没有开启 idMapping”的场景；
+    // 3. 如果把清理逻辑塞回兼容分支，就会再次出现分支可达性和语义不一致的问题。
+    // 所以这里统一根据兼容后的最终值判断，避免历史 userKey 被继续带到上报数据中。
+    // 没有开启IDMapping的时候要把userKey清掉，防止之前有数被带到上报数据里
+    if (!configs.idMapping) {
+      this.growingIO.userStore.setUserKey(trackingId, '');
     }
     unset(configs, 'enableIdMapping');
     // 是否开启强制插件模式

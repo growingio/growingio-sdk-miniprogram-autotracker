@@ -1,27 +1,6 @@
 import { PLATFORMS } from './platforms';
 
 /**
- * 跳转小程序选项接口
- * @interface NavigateToMiniProgramOption
- */
-export interface NavigateToMiniProgramOption {
-  /** 目标小程序 appId */
-  appId: string;
-  /** 打开的页面路径 */
-  path?: string;
-  /** 需要传递给目标小程序的数据 */
-  extraData?: any;
-  /** 要打开的小程序版本 */
-  envVersion?: any;
-  /** 接口调用成功的回调函数 */
-  success: (res: any) => void;
-  /** 接口调用失败的回调函数 */
-  fail: (err: any) => void;
-  /** 接口调用结束的回调函数（调用成功、失败都会执行） */
-  complete: () => void;
-}
-
-/**
  * 应用来源信息接口
  * @interface AppSource
  */
@@ -81,17 +60,6 @@ export interface SystemInfo {
 }
 
 /**
- * 地理位置接口
- * @interface Location
- */
-export interface Location {
-  /** 纬度，范围为 -90~90，负数表示南纬 */
-  latitude: number;
-  /** 经度，范围为 -180~180，负数表示西经 */
-  longitude: number;
-}
-
-/**
  * 小程序实例接口
  * @interface MinipInstanceType
  */
@@ -102,8 +70,6 @@ export interface MinipInstanceType {
   platform: PLATFORMS;
   /** 场景值前缀 */
   scnPrefix: string;
-  /** 地理位置 */
-  location: Location;
   /** 快应用来源 */
   appSource: AppSource;
   /** 系统信息 */
@@ -114,14 +80,6 @@ export interface MinipInstanceType {
   hookSetTitle: () => void;
   /** 获取快应用来源信息 */
   getAppSource?: () => AppSource;
-  /** 保留当前页面，跳转到应用内的某个页面 */
-  navigateTo?: (opt: any) => void;
-  /** 跳转到 tabBar 页面，并关闭其他所有非 tabBar 页面 */
-  switchTab?: (opt: any) => void;
-  /** 打开另一个小程序 */
-  navigateToMiniProgram?: (opt: NavigateToMiniProgramOption) => void;
-  /** 获取图片信息 */
-  getImageInfo: (args: any) => any;
   /** 采集曝光事件 */
   initImpression?: (collectPage: any) => void;
   /** 获取快应用分享信息 */
@@ -134,8 +92,6 @@ export interface MinipInstanceType {
   getPageTitle: (page: any) => string;
   /** 同步获取存储数据 */
   getStorageSync: (key: string) => any;
-  /** 异步获取存储数据 */
-  getStorage: (key: string) => Promise<string>;
   /** 同步存储数据 */
   setStorageSync: (
     key: string,
@@ -146,8 +102,6 @@ export interface MinipInstanceType {
   setStorage: (key: string, value: any) => void;
   /** 同步移除指定数据 */
   removeStorageSync: (key: string) => void;
-  /** 异步移除指定数据 */
-  removeStorage: (key: string) => void;
   /** 获取网络类型 */
   getNetworkType: () => Promise<{ networkType: string }>;
   /** 网络请求 */
@@ -163,8 +117,6 @@ export interface MinipInstanceType {
   }: any) => void;
   /** 获取小程序系统信息 */
   getSystemInfo?: () => Promise<SystemInfo>;
-  /** 获取小程序设置 */
-  getSetting?: () => any;
   /** 监听网络变更 */
   setNetworkStatusListener?: () => any;
   /** 执行特有的分享promise */

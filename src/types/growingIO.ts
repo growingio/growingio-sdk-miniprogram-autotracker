@@ -27,8 +27,6 @@ export interface GrowingIOType {
   sdkVersion: string;
   /** 是否在小程序插件中标识 */
   inPlugin: boolean;
-  /** 分包在全局中的实例key值 */
-  subKey?: string;
   /** 小程序实例配置 */
   platformConfig: any;
   /** sdk初始化标识 */

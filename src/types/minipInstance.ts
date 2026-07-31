@@ -76,6 +76,8 @@ export interface MinipInstanceType {
   systemInfo: any;
   /** 网络信息 */
   network: any;
+  /** 快应用异步身份存储是否已恢复 */
+  identityReady?: boolean;
   /** hook动态设置页面标题方法 */
   hookSetTitle: () => void;
   /** 获取快应用来源信息 */

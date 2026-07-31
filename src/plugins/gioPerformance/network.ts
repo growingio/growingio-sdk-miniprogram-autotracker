@@ -4,6 +4,7 @@ import {
   forEach,
   isArray,
   isEmpty,
+  isFunction,
   isNil,
   isRegExp,
   isString,
@@ -84,6 +85,9 @@ export default class Network {
     const self = this;
     ['request', 'downloadFile', 'uploadFile'].forEach((reqKey: string) => {
       const originRequest = this.minipInst[reqKey];
+      if (!isFunction(originRequest)) {
+        return;
+      }
       Object.defineProperty(this.minipInst, reqKey, {
         writable: true,
         enumerable: true,

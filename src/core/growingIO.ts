@@ -120,6 +120,15 @@ class GrowingIO implements GrowingIOType {
     this.emitter.emit(EMIT_MSG.ON_SDK_INITIALIZE_BEFORE, { options });
     try {
       consoleText('Gio小程序SDK 初始化中...', 'info');
+      // 框架包可能被误放入不支持的平台。构造阶段保持安全，初始化阶段明确失败，
+      // 避免 SDK 抛异常影响宿主应用，同时也不误上报不完整数据。
+      if (this.platformConfig?.supported === false) {
+        throw new Error(
+          `当前 ${this.gioFramework} SDK 不支持 ${
+            this.gioPlatform || '未知'
+          } 平台，已停止初始化!`
+        );
+      }
       if (
         options.trackingId &&
         this.dataStore.initializedTrackingIds.includes(options.trackingId)
@@ -401,15 +410,16 @@ class GrowingIO implements GrowingIOType {
       userId = toString(userId).slice(0, 1000);
       userKey = toString(userKey).slice(0, 1000);
       this.userStore.setUserId(trackingId, userId);
-      const processedUserKey =
+      let processedUserKey =
         !isNil(userKey) && toString(userKey).length > 0
           ? toString(userKey).slice(0, 1000)
           : '';
-      this.userStore.setUserKey(trackingId, processedUserKey);
       const { idMapping } = this.dataStore.getTrackerVds(trackingId);
       if (!idMapping && processedUserKey) {
         consoleText('您设置了 userKey ，请初始化开启 idMapping!', 'warn');
+        processedUserKey = '';
       }
+      this.userStore.setUserKey(trackingId, processedUserKey);
       // 切换userId时重置session
       if (prevId && prevId !== userId) {
         this.userStore.setSessionId(trackingId);
@@ -691,6 +701,14 @@ class GrowingIO implements GrowingIOType {
     ) {
       this.dataStore.locationData[trackingId] = { latitude, longitude };
     }
+  };
+
+  /**
+   * 清除手动设置的位置信息
+   * @param {string} trackingId - 实例 ID
+   */
+  clearLocation = (trackingId: string) => {
+    this.dataStore.locationData[trackingId] = {};
   };
 
   /**

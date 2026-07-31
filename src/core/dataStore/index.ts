@@ -334,10 +334,10 @@ class DataStore implements DataStoreType {
   // ?多实例插件会重写该方法
   initTrackerHooker = (vdsConfig: OriginOptions) => {
     const { platformConfig, inPlugin, minipInstance, plugins } = this.growingIO;
-    const { uniVue, taro, mpx } = vdsConfig;
+    const { uniVue, taro, mpx, mpvue } = vdsConfig;
 
     // 如果是使用全量版本时，当前小程序不是框架的，要允许原生的hook
-    if (!(uniVue || taro || minipInstance.platform === 'quickapp')) {
+    if (!(uniVue || taro || mpvue || minipInstance.platform === 'quickapp')) {
       platformConfig.canHook = true;
     }
     // 初始化核心钩子（重写全局）
@@ -355,6 +355,10 @@ class DataStore implements DataStoreType {
       // taro
       if (taro) {
         plugins?.gioTaroAdapter?.main();
+      }
+      // mpvue
+      if (mpvue) {
+        plugins?.gioMpvueAdapter?.main();
       }
       // mpx
       if (mpx) {

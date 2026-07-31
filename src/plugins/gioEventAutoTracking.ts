@@ -55,7 +55,7 @@ class GioEventAutoTracking {
       return;
     }
     // taro3多余事件过滤
-    if (vdsConfig.taro && [('#eh', 'eh')].includes(eventName)) {
+    if (vdsConfig.taro && ['#eh', 'eh'].includes(eventName)) {
       return;
     }
     this.prevEvent = e;
@@ -197,10 +197,19 @@ class GioEventAutoTracking {
         element: { xpath },
         ...eventContextBuilder(trackingId)
       };
-      const ev = ut.get(e, 'detail.value') || ut.get(e, 'target.attr.value');
+      // mpvue 会把小程序原始事件包装为 Vue 事件，并将 detail 展开到
+      // target 上；此时 e.detail 不存在，输入值位于 e.target.value。
+      // 保持原生 / Taro 的 detail.value 优先级，同时兼容旧的 attr 结构。
+      let ev = ut.get(e, 'detail.value');
+      if (ut.isNil(ev)) {
+        ev = ut.get(e, 'target.value');
+      }
+      if (ut.isNil(ev)) {
+        ev = ut.get(e, 'target.attr.value');
+      }
       if (target?.dataset?.growingTrack || target?.dataset?.growingtrack) {
         if (!ut.isNil(ev)) {
-          event.element.textValue = ut.toString(ev);
+          event.element.textValue = this.getPickerDisplayValue(e, ev);
         }
       }
       event.element = [event.element];
@@ -211,6 +220,38 @@ class GioEventAutoTracking {
       );
       eventInterceptor(event);
     }
+  };
+
+  /**
+   * picker 的 change 事件只会提供选中下标。框架编译层或业务模板可将
+   * range 放入 data-growing-picker-range，SDK 会优先上报该下标对应的显示值。
+   * 无法解析范围、下标或显示值时保留原始 value，兼容已有 picker 事件。
+   */
+  getPickerDisplayValue = (e: EventTarget, value: any) => {
+    const rangeValue =
+      ut.get(e, 'currentTarget.dataset.growingPickerRange') ??
+      ut.get(e, 'target.dataset.growingPickerRange');
+    const range = ut.isArray(rangeValue)
+      ? rangeValue
+      : niceTry(() => JSON.parse(rangeValue));
+    const index = Number(value);
+    if (
+      !ut.isArray(range) ||
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index >= range.length
+    ) {
+      return ut.toString(value);
+    }
+    const item = range[index];
+    const rangeKey =
+      ut.get(e, 'currentTarget.dataset.growingPickerRangeKey') ??
+      ut.get(e, 'target.dataset.growingPickerRangeKey');
+    const label =
+      rangeKey && item && typeof item === 'object' ? item[rangeKey] : item;
+    return ut.isNil(label) || typeof label === 'object'
+      ? ut.toString(value)
+      : ut.toString(label);
   };
 
   // --------------------- 以下内容是对新版小程序圈选的支持 ---------------------
@@ -339,7 +380,10 @@ class GioEventAutoTracking {
       method: 'POST',
       data: requestData,
       complete: ({ statusCode, data, errMsg }: any) => {
-        if (![200, 204].includes(statusCode) || !data?.success) {
+        // 204 按 HTTP 语义成功且没有响应体；200 则仍校验圈选服务业务状态。
+        const requestSucceeded =
+          statusCode === 204 || (statusCode === 200 && data?.success === true);
+        if (!requestSucceeded) {
           this.showPromptModal(
             'error',
             data?.message || data || errMsg || '圈选请求失败，请重试!'

@@ -18,9 +18,11 @@ const EXTRA_PLUGINS = ['gioPerformance'];
 class BasePlugins implements PluginsType {
   public pluginItems: PluginItem[];
   public pluginsContext: any;
+  private handlingError: boolean;
   constructor(public growingIO: GrowingIOType) {
     this.pluginsContext = { plugins: {} };
     this.pluginItems = [];
+    this.handlingError = false;
     this.growingIO.emitter?.on(EMIT_MSG.ON_INSTALL, (args) =>
       this.callLifeCycle('onInstall', args)
     );
@@ -131,7 +133,12 @@ class BasePlugins implements PluginsType {
    * @returns {boolean} - 是否移除成功
    */
   uninstall = (pluginName: string) => {
-    unset(this.pluginItems, pluginName);
+    const pluginIndex = this.pluginItems.findIndex(
+      (pluginItem) => pluginItem.name === pluginName
+    );
+    if (pluginIndex > -1) {
+      this.pluginItems.splice(pluginIndex, 1);
+    }
     const u = unset(this.growingIO?.plugins, pluginName);
     if (!u) {
       consoleText(`卸载插件 ${pluginName} 失败!`, 'error');
@@ -143,7 +150,7 @@ class BasePlugins implements PluginsType {
    * 移除所有插件
    */
   uninstallAll = () => {
-    this.pluginItems.forEach((o: PluginItem) => this.uninstall(o.name));
+    [...this.pluginItems].forEach((o: PluginItem) => this.uninstall(o.name));
   };
 
   /**
@@ -152,10 +159,18 @@ class BasePlugins implements PluginsType {
    * @param {any} e - 错误对象
    */
   lifeError = (p: PluginItem, e: any) => {
-    this.growingIO.emitter.emit(EMIT_MSG.ON_ERROR, {
-      plugin: p,
-      error: e
-    });
+    // onError 生命周期自身抛错时不能再次广播 ON_ERROR，否则会同步递归直至栈溢出。
+    if (!this.handlingError) {
+      this.handlingError = true;
+      try {
+        this.growingIO.emitter.emit(EMIT_MSG.ON_ERROR, {
+          plugin: p,
+          error: e
+        });
+      } finally {
+        this.handlingError = false;
+      }
+    }
     consoleText(`插件执行错误 ${p?.name || 'unknown'} ${e}`, 'error');
   };
 

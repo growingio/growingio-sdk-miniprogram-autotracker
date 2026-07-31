@@ -25,11 +25,13 @@ export const initialCheck = (growingIO: GrowingIOType, args: any) => {
   // ?重复初始化由init方法内部判断
   const projectId = toString(args[0]);
   const dataSourceId = toString(args[1]);
+  const appIdValue = isString(args[2]) ? args[2].trim() : args[2];
+  const appId = verifyId(appIdValue) ? toString(appIdValue) : '';
   // 参数为空校验
-  const userOptions = (args.length === 4 ? args[3] : args[2]) || {};
-  if (!projectId || !dataSourceId) {
+  const userOptions = args[3] || {};
+  if (!projectId || !dataSourceId || !appId) {
     consoleText(
-      'SDK初始化失败，请使用 gdp("init", "您的GrowingIO项目 accountId", "您项目的 dataSourceId", "您的小程序 AppId（可选）", options: { serverUrl: "您的数据上报地址" }); 进行初始化!',
+      'SDK初始化失败，请使用 gdp("init", "您的GrowingIO项目 accountId", "您项目的 dataSourceId", "您的小程序 AppId", options: { serverUrl: "您的数据上报地址" }); 进行初始化!',
       'error'
     );
     return false;
@@ -48,7 +50,7 @@ export const initialCheck = (growingIO: GrowingIOType, args: any) => {
   return {
     projectId,
     dataSourceId,
-    appId: toString(args.length === 4 ? args[2] : ''),
+    appId,
     userOptions
   };
 };

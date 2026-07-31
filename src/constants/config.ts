@@ -41,6 +41,8 @@ export const DEFAULT_SETTINGS = {
   taro: { type: ['object', 'module'], default: false },
   // taro框架vue实例
   taroVue: { type: ['object', 'function'], default: false },
+  // mpvue框架实例
+  mpvue: { type: ['object', 'function'], default: false },
   // mpx框架实例
   mpx: { type: ['module', 'function'], default: false },
   // 淘宝小程序/小部件配置
@@ -80,6 +82,7 @@ export const DIRECT_HANDLERS = [
 export const INSTANCE_HANDLERS = [
   'clearGeneralProps', // 清除埋点通用属性
   'clearPageAttributes', // 清除页面属性
+  'clearLocation', // 清除手动设置的位置信息
   'clearTrackTimer', // 清除所有事件计时器
   'clearUserId', // 清除用户id
   'getABTest', // 获取AB实验数据

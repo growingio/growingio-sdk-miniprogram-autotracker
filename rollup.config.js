@@ -10,9 +10,8 @@ import replace from '@rollup/plugin-replace';
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 
-const processENV = process.argv[process.argv.length - 1]
-  .split('-')
-  .filter((o) => o);
+// 构建目标通过 Rollup 官方 --environment 参数注入，避免依赖未知 CLI flag。
+const processENV = (process.env.GIO_BUILD || '').split('-').filter((o) => o);
 
 // 小程序平台
 const platform = processENV[0];
@@ -46,7 +45,7 @@ console.log(
 
 const fileName = () => {
   let n = 'dist/';
-  n += PLATFORMS[platform] ? PLATFORMS[platform] : frameName;
+  n += PLATFORMS[platform] ?? frameName;
   n += '.js';
   return n;
 };
@@ -59,6 +58,7 @@ const config = {
   },
   plugins: [
     replace({
+      preventAssignment: true,
       __SDK_VERSION__: version,
       __GIO_PLATFORM__: PLATFORMS[platform] ? platform : 'framework',
       __GIO_FRAMEWORK__: PLATFORMS[platform] ? 'native' : frameName,
@@ -73,7 +73,7 @@ const config = {
     }),
     resolve(),
     commonjs({ extensions: ['.js', '.ts'] }),
-    typescript(),
+    typescript({ sourceMap: false }),
     babel({
       babelHelpers: 'bundled',
       exclude: 'node_modules/**',

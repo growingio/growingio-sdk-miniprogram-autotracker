@@ -40,14 +40,45 @@ class BaseInstance implements MinipInstanceType {
     this.platform = platform;
     this.scnPrefix = scnPrefix;
     this.growingIO.emitter.on(EMIT_MSG.OPTION_INITIALIZED, () => {
-      this.getNetworkType().then(() =>
-        this.growingIO.dataStore?.eventReleaseInspector()
-      );
-      this.getSystemInfo().then(() =>
-        this.growingIO.dataStore?.eventReleaseInspector()
-      );
+      this.loadMetadata('network', () => this.getNetworkType());
+      this.loadMetadata('systemInfo', () => this.getSystemInfo());
     });
   }
+
+  /**
+   * 加载首批事件依赖的网络和系统元数据。
+   * 平台 API 缺失、抛错、拒绝或 3 秒内不返回时写入失败占位，确保拦截队列最终释放。
+   */
+  private loadMetadata = (
+    key: 'network' | 'systemInfo',
+    loader: () => Promise<any>
+  ) => {
+    const metadataPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => resolve(undefined), 3000);
+      Promise.resolve(niceTry(loader)).then(
+        (value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      );
+    });
+    metadataPromise.then(
+      (value) => {
+        if (isEmpty(this[key])) {
+          this[key] = isEmpty(value) ? { __gioFailed: true } : value;
+        }
+        this.growingIO.dataStore?.eventReleaseInspector();
+      },
+      () => {
+        this[key] = { __gioFailed: true };
+        this.growingIO.dataStore?.eventReleaseInspector();
+      }
+    );
+  };
 
   /**
    * 通过 hook setNavigationBarTitle 方法优雅地获取客户设置的当前页面标题

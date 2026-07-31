@@ -169,6 +169,14 @@ export interface EventHooksType {
   actionEffects: any;
   /** 当前页面 */
   currentPage: MinipPageType;
+  /** 原始 App 构造器 */
+  originalApp: (any: any) => any;
+  /** 原始 Page 构造器 */
+  originalPage: (any: any) => any;
+  /** 原始 Component 构造器 */
+  originalComponent: (any: any) => any;
+  /** 原始 Behavior 构造器 */
+  originalBehavior: (any: any) => any;
   /** 判断是否为非构造函数的一个函数 */
   isNormalFc: (key: string, method: any) => any;
   /** 补充生命周期函数 */

@@ -20,7 +20,7 @@ const gdp = function () {
   let trackingId = 'g0';
   let handler = handlerName;
   // 如果方法名包含 "."，则分割为 trackingId 和 handler
-  if (handlerName.indexOf('.') > -1) {
+  if (isString(handlerName) && handlerName.indexOf('.') > -1) {
     trackingId = handlerName.split('.')[0] ?? 'g0'; // 没有指定trackingId，默认为g0
     handler = handlerName.split('.')[1];
   }

@@ -32,15 +32,23 @@ export type PLATFORMTYPES =
 
 /**
  * 框架类型定义
- * @typedef {'taro' | 'uniapp' | 'full'} FRAMEWORKS
+ * @typedef {'taro' | 'uniapp' | 'mpx' | 'mpvue' | 'native' | 'full'} FRAMEWORKS
  */
-export type FRAMEWORKS = 'taro' | 'uniapp' | 'full';
+export type FRAMEWORKS =
+  | 'taro'
+  | 'uniapp'
+  | 'mpx'
+  | 'mpvue'
+  | 'native'
+  | 'full';
 
 /**
  * 平台配置接口
  * @interface PlatformConfigType
  */
 export interface PlatformConfigType {
+  /** 当前构建是否支持检测到的运行平台 */
+  supported?: boolean;
   /** 平台名称 */
   name?: string;
   /** 平台类型 */

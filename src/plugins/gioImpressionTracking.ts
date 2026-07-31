@@ -225,7 +225,7 @@ class GioImpressionTracking {
     const observerOption = { thresholds: [threshold], [optionKey]: true };
     if (
       ['tb', 'my'].includes(gioPlatform) &&
-      ut.compareVersion(my.SDKVersion, '2.7.0') >= -1
+      ut.compareVersion(my.SDKVersion, '2.7.0') >= 0
     ) {
       observerOption.dataset = true;
     }
@@ -298,6 +298,10 @@ class GioImpressionTracking {
         let dataset: any = result.dataset;
         if (taro && ut.isTaro3(taro)) {
           dataset = this.getTaro3Dataset(collectPage.route, result.id);
+        }
+        if (!ut.isObject(dataset)) {
+          ut.consoleText('曝光节点缺少有效的 dataset，已跳过本次采集!', 'warn');
+          return;
         }
         const dataProperties = this.getImpressionProperties(dataset);
         // 曝光类型判断，单次曝光的需要有id和gio-imp-type字段

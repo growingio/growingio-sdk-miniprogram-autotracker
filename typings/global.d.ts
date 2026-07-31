@@ -6,7 +6,6 @@ declare interface Window {
   GioComponent: any;
 }
 
-declare var global: any;
 declare var $global: any;
 declare var document: Document;
 declare var App: any;

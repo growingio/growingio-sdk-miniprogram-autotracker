@@ -94,6 +94,9 @@ export default class Exception {
       'navigateBack'
     ].forEach((reqKey: string) => {
       const originNavigate = this.minipInst[reqKey];
+      if (!isFunction(originNavigate)) {
+        return;
+      }
       Object.defineProperty(this.minipInst, reqKey, {
         writable: true,
         enumerable: true,

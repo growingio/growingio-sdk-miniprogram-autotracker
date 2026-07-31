@@ -70,6 +70,8 @@ export interface UserOptions {
   taro?: any;
   /** taro 框架 vue 实例 */
   taroVue?: any;
+  /** mpvue 框架实例 */
+  mpvue?: any;
   /** 淘宝小程序/小部件配置 */
   tbConfig?: TBConfig;
   /** uniapp vue 实例 */

@@ -1,25 +1,26 @@
 {
   "name": "gio-miniprogram-sdk",
-  "version": "4.5.1",
+  "version": "4.6.0",
   "description": "GrowngIO官方小程序 SDK，具备自动采集基本的用户行为事件，比如访问和行为数据等。目前支持微信小程序、支付宝小程序、百度小程序、字节(抖音头条)小程序、QQ小程序、淘宝小程序、京东小程序、快手小程序、快应用。",
   "author": "anyi@startdt.com",
-  "license": "GNU General Public License v3.0",
+  "license": "Apache-2.0 license",
   "scripts": {
-    "build:jd": "rollup -c rollup.config.js --jd",
-    "build:ks": "rollup -c rollup.config.js --ks",
-    "build:mpx": "rollup -c rollup.config.js --framework-mpx",
-    "build:my": "rollup -c rollup.config.js --my",
-    "build:plugins": "rollup -c rollup.plugins.config.js --plugins",
-    "build:qq": "rollup -c rollup.config.js --qq",
-    "build:quickapp": "rollup -c rollup.config.js --quickapp",
-    "build:swan": "rollup -c rollup.config.js --swan",
-    "build:taro": "rollup -c rollup.config.js --framework-taro",
-    "build:tb": "rollup -c rollup.config.js --tb",
-    "build:tt": "rollup -c rollup.config.js --tt",
-    "build:uniapp": "rollup -c rollup.config.js --framework-uniapp",
-    "build:wx": "rollup -c rollup.config.js --wx",
-    "build:xhs": "rollup -c rollup.config.js --xhs",
-    "build": "npm run build:wx && npm run build:my && npm run build:tt && npm run build:swan && npm run build:ks && npm run build:jd && npm run build:xhs && npm run build:qq && npm run build:tb && npm run build:quickapp && npm run build:uniapp && npm run build:taro && npm run build:mpx && npm run build:plugins",
+    "build:jd": "rollup -c rollup.config.js --environment GIO_BUILD:jd",
+    "build:ks": "rollup -c rollup.config.js --environment GIO_BUILD:ks",
+    "build:my": "rollup -c rollup.config.js --environment GIO_BUILD:my",
+    "build:plugins": "rollup -c rollup.plugins.config.js --environment GIO_BUILD:plugins",
+    "build:qq": "rollup -c rollup.config.js --environment GIO_BUILD:qq",
+    "build:quickapp": "rollup -c rollup.config.js --environment GIO_BUILD:quickapp",
+    "build:swan": "rollup -c rollup.config.js --environment GIO_BUILD:swan",
+    "build:mpvue": "rollup -c rollup.config.js --environment GIO_BUILD:framework-mpvue",
+    "build:taro": "rollup -c rollup.config.js --environment GIO_BUILD:framework-taro",
+    "build:mpx": "rollup -c rollup.config.js --environment GIO_BUILD:framework-mpx",
+    "build:tb": "rollup -c rollup.config.js --environment GIO_BUILD:tb",
+    "build:tt": "rollup -c rollup.config.js --environment GIO_BUILD:tt",
+    "build:uniapp": "rollup -c rollup.config.js --environment GIO_BUILD:framework-uniapp",
+    "build:wx": "rollup -c rollup.config.js --environment GIO_BUILD:wx",
+    "build:xhs": "rollup -c rollup.config.js --environment GIO_BUILD:xhs",
+    "build": "npm run build:wx && npm run build:my && npm run build:tt && npm run build:swan && npm run build:ks && npm run build:jd && npm run build:xhs && npm run build:qq && npm run build:tb && npm run build:quickapp && npm run build:uniapp && npm run build:taro && npm run build:mpx && npm run build:mpvue && npm run build:plugins",
     "lint": "eslint --fix 'src/**/*.{js,ts}'"
   },
   "repository": {
@@ -129,6 +130,10 @@
     "./mpx": {
       "import": "./dist/mpx.js",
       "require": "./dist/mpx.js"
+    },
+    "./mpvue": {
+      "import": "./dist/mpvue.js",
+      "require": "./dist/mpvue.js"
     },
     "./plugins/gioABTest": {
       "import": "./dist/plugins/gioABTest.js",

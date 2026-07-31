@@ -50,6 +50,14 @@ class UserStore implements UserStoreType {
    */
   getUid = () => {
     const { minipInstance } = this.growingIO;
+    // 快应用存储为异步 API。恢复完成前返回空值，避免先生成临时 uid，
+    // 首批事件释放时会由 eventRefactor 使用恢复后的稳定身份重新补齐。
+    if (
+      this.growingIO.gioPlatform === 'quickapp' &&
+      minipInstance.identityReady === false
+    ) {
+      return '';
+    }
     // 内存中拿不到尝试从存储中拿
     if (!this._uid) {
       this._uid = minipInstance.getStorageSync(this._getUidKey());

@@ -20,6 +20,7 @@ export interface PluginsType {
   gioCustomTracking?: any;
   gioEventAutoTracking?: any;
   gioImpressionTracking?: any;
+  gioMpvueAdapter?: any;
   gioPerformance?: any;
   gioTaobaoAdapter?: any;
   gioTaroAdapter?: any;

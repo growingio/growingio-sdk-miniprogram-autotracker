@@ -43,7 +43,8 @@ Nodejs 版本>=16，推荐使使用 nvm 进行 Nodejs 版本管理
 > npm run build:quickapp // 原生快应用<br/>
 > npm run build:uniapp // uni-app 框架<br/>
 > npm run build:taro // Taro 框架<br/>
-> npm run build:mpx // MPX 框架
+> npm run build:mpx // MPX 框架<br/>
+> npm run build:mpvue // MPX 框架
 
 打包插件
 

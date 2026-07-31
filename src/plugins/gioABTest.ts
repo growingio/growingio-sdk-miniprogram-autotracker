@@ -18,7 +18,8 @@ import {
   consoleText,
   hashCode,
   limitObject,
-  niceCallback
+  niceCallback,
+  niceTry
 } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
 import { ABTEST_DATA_REG, ABTEST_SIGN_REG } from '@@/constants/regex';
@@ -126,7 +127,9 @@ class GioABTest {
    */
   abtStorageCheck = () => {
     const { minipInstance }: any = this.growingIO;
-    const storageKeys = minipInstance.minip?.getStorageInfoSync().keys || [];
+    const storageInfo =
+      niceTry(() => minipInstance.minip?.getStorageInfoSync?.()) || {};
+    const storageKeys = Array.isArray(storageInfo.keys) ? storageInfo.keys : [];
     // 请求标记
     const abtsKeys = storageKeys.filter((k) => ABTEST_SIGN_REG.test(k));
     abtsKeys.forEach((k) => {
@@ -251,65 +254,77 @@ class GioABTest {
       minipInstance
     } = this.growingIO;
     const { projectId, dataSourceId } = dataStore.getTrackerVds(trackingId);
-    minipInstance.request({
-      url: this.url[trackingId],
-      header: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      method: 'POST',
-      data: {
-        accountId: projectId,
-        datasourceId: dataSourceId,
-        distinctId: getUid(),
-        layerId,
-        // 只有“当前 session 仍然等于首访 session 快照”时，才认为这次 AB 请求来自新设备首访。
-        newDevice: this.visitSids[trackingId] === getSessionId(trackingId)
-      },
-      timeout: this.requestTimeout,
-      success: ({ data }: any) => {
-        if (data.code === 0) {
-          this.experimentVerify(
-            trackingId,
-            { ...data, layerId },
-            originData,
-            callback
-          );
-        } else {
-          consoleText(`获取ABTest数据失败! ${data.errorMsg}!`, 'error');
-          // 接口业务失败返回false信息
-          niceCallback(callback, {});
-        }
-        // 接口调用返回后刷新接口调用标记
-        minipInstance.setStorageSync(
-          `${this.getHashKey(trackingId, layerId)}_gdp_abt_sign`,
-          Date.now() + 1000 * 60 * this.requestInterval
+    // 各小程序失败回调的参数结构并不一致，先统一提取错误文本；
+    // 重试次数仍由当前请求链路携带，保证异常响应不会污染后续请求。
+    const handleRequestFailure = (result: any = {}) => {
+      const errMsg = toString(result?.errMsg || result);
+      // 请求超时（这里没用微信提供的errno，因为它没有值，其他小程序也不一定能兼容）
+      if (errMsg.indexOf('timeout') > -1) {
+        consoleText('获取ABTest数据失败! 请求超时!', 'error');
+        niceCallback(callback, {});
+      } else if (retryCount < 2) {
+        this.initiateRequest(
+          trackingId,
+          layerId,
+          originData,
+          callback,
+          retryCount + 1
         );
-      },
-      fail: ({ errMsg }: any) => {
-        // 请求超时（这里没用微信提供的errno，因为它没有值，其他小程序也不一定能兼容）
-        if (errMsg.indexOf('timeout') > -1) {
-          consoleText('获取ABTest数据失败! 请求超时!', 'error');
-          // 接口超时返回false信息
-          niceCallback(callback, {});
-        } else {
-          // 其他失败情况重试
-          if (retryCount < 2) {
-            this.initiateRequest(
+      } else {
+        consoleText(
+          `获取ABTest数据失败! ${JSON.stringify(errMsg).slice(0, 30)}!`,
+          'error'
+        );
+        niceCallback(callback, {});
+      }
+    };
+
+    try {
+      minipInstance.request({
+        url: this.url[trackingId],
+        header: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        method: 'POST',
+        data: {
+          accountId: projectId,
+          datasourceId: dataSourceId,
+          distinctId: getUid(),
+          layerId,
+          // 只有“当前 session 仍然等于首访 session 快照”时，才认为这次 AB 请求来自新设备首访。
+          newDevice: this.visitSids[trackingId] === getSessionId(trackingId)
+        },
+        timeout: this.requestTimeout,
+        success: (result: any = {}) => {
+          const data = result?.data;
+          // HTTP success 不代表业务响应完整。格式异常时立即回调空结果，且不写入节流标记，
+          // 允许客户下一次调用重新请求。
+          if (!isObject(data)) {
+            consoleText('获取ABTest数据失败! 响应数据格式不正确!', 'error');
+            niceCallback(callback, {});
+            return;
+          }
+          if (data.code === 0) {
+            this.experimentVerify(
               trackingId,
-              layerId,
+              { ...data, layerId },
               originData,
-              callback,
-              retryCount + 1
+              callback
             );
           } else {
-            consoleText(
-              `获取ABTest数据失败! ${JSON.stringify(errMsg).slice(0, 30)}!`,
-              'error'
-            );
-            // 重试结束后返回false信息
+            consoleText(`获取ABTest数据失败! ${data.errorMsg}!`, 'error');
+            // 接口业务失败返回false信息
             niceCallback(callback, {});
           }
-        }
-      }
-    });
+          // 接口调用返回后刷新接口调用标记
+          minipInstance.setStorageSync(
+            `${this.getHashKey(trackingId, layerId)}_gdp_abt_sign`,
+            Date.now() + 1000 * 60 * this.requestInterval
+          );
+        },
+        fail: handleRequestFailure
+      });
+    } catch (error) {
+      handleRequestFailure({ errMsg: error });
+    }
   };
 
   /**

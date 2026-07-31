@@ -211,6 +211,11 @@ export interface GrowingIOType {
     longitude: number
   ) => void;
   /**
+   * 清除手动设置的位置信息
+   * @param {string} trackingId 跟踪器 ID
+   */
+  clearLocation: (trackingId: string) => void;
+  /**
    * 手动更新曝光监听
    * @param {any} [collect] 采集配置
    */

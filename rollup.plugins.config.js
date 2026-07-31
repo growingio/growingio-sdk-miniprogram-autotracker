@@ -12,11 +12,10 @@ import typescript from '@rollup/plugin-typescript';
 
 const fs = require('fs');
 
-const processENV = process.argv[process.argv.length - 1]
-  .split('-')
-  .filter((o) => o);
+// 构建目标通过 Rollup 官方 --environment 参数注入，避免依赖未知 CLI flag。
+const processENV = (process.env.GIO_BUILD || '').split('-').filter((o) => o);
 // 获取是否打包全量插件
-const folder = processENV[0] ? processENV[0] : 'plugins';
+const folder = processENV[0] ?? 'plugins';
 
 // 获取外置插件的目录
 const plugInFolder = fs
@@ -45,6 +44,7 @@ const configGenerat = ({ input, output, name }) => ({
   },
   plugins: [
     replace({
+      preventAssignment: true,
       __PLUGIN_VERSION__: packageJson.version || '0.0.1'
     }),
     alias({
@@ -54,7 +54,7 @@ const configGenerat = ({ input, output, name }) => ({
     }),
     resolve(),
     commonjs({ extensions: ['.js', '.ts'] }),
-    typescript({ target: 'ES5' }),
+    typescript({ target: 'ES5', sourceMap: false }),
     babel({
       babelHelpers: 'bundled',
       exclude: 'node_modules/**',

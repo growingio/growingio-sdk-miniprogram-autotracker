@@ -1,5 +1,6 @@
 export default {
   GIOID_UPDATE: 'GIOID_UPDATE', // gioId变更事件
+  IDENTITY_CHANGED: 'IDENTITY_CHANGED', // 完整身份事务提交，携带实例与身份快照
   MINIP_LIFECYCLE: 'MINIP_LIFECYCLE', // 小程序生命周期
   ON_COMMIT_REQUEST: 'ON_COMMIT_REQUEST', // 小程序事件提交队列
   ON_COMPOSE_AFTER: 'ON_COMPOSE_AFTER', // 插件生命周期：构建事件后

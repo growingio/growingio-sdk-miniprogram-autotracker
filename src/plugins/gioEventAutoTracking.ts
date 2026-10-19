@@ -9,6 +9,7 @@ import { consoleText, getExtraData, isTaro3, niceTry } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
 import { isEmpty } from '@@/utils/glodash';
 import qs from 'querystringify';
+import { createRequestAttempt } from '@@/utils/requestAttempt';
 
 let ut;
 class GioEventAutoTracking {
@@ -374,24 +375,32 @@ class GioEventAutoTracking {
    */
   circleRequest = (requestData: any) => {
     const { minipInstance } = this.growingIO;
-    minipInstance.request({
+    const handleComplete = ({ statusCode, data, errMsg }: any) => {
+      const requestSucceeded =
+        statusCode === 204 || (statusCode === 200 && data?.success === true);
+      if (!requestSucceeded) {
+        this.showPromptModal('error', data?.message || data || errMsg || '圈选请求失败，请重试!');
+        this.circleClose();
+      }
+    };
+    const attempt = createRequestAttempt(10000, () =>
+      handleComplete({ errMsg: '圈选请求超时，请重试!' })
+    );
+    try {
+      const task = minipInstance.request({
       url: this.circleServerUrl,
       header: { 'content-type': 'application/json;charset=UTF-8' },
       method: 'POST',
       data: requestData,
-      complete: ({ statusCode, data, errMsg }: any) => {
-        // 204 按 HTTP 语义成功且没有响应体；200 则仍校验圈选服务业务状态。
-        const requestSucceeded =
-          statusCode === 204 || (statusCode === 200 && data?.success === true);
-        if (!requestSucceeded) {
-          this.showPromptModal(
-            'error',
-            data?.message || data || errMsg || '圈选请求失败，请重试!'
-          );
-          this.circleClose();
-        }
+      timeout: 10000,
+      complete: (result: any) => {
+        if (attempt.finish()) handleComplete(result);
       }
     });
+      attempt.setTask(task);
+    } catch (error) {
+      if (attempt.finish()) handleComplete({ errMsg: String(error) });
+    }
     console.log(requestData, '----->circleRequest');
   };
 }

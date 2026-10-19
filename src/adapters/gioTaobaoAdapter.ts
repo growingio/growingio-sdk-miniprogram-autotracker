@@ -4,7 +4,7 @@
  */
 import { EVENT, EXTEND_EVENT } from '@@/types/base';
 import { GrowingIOType } from '@@/types/growingIO';
-import { head, unset } from '@@/utils/glodash';
+import { unset } from '@@/utils/glodash';
 import EMIT_MSG from '@@/constants/emitMsg';
 
 let ut;
@@ -82,40 +82,42 @@ class GioTaobaoAdapter {
 
   // 单条发送无延迟
   singleInvoke = (trackingId: string) => {
-    const { vdsConfig, emitter, uploader } = this.growingIO;
+    const { vdsConfig, uploader } = this.growingIO;
     let hoardingQueue = uploader.getHoardingQueue(trackingId);
     let requestQueue = uploader.getRequestQueue(trackingId);
-    // 过滤掉重试超过3次的请求(直接丢弃)
-    uploader.requestQueue[trackingId] = [...requestQueue].filter(
-      (o) => (uploader.retryIds[o.requestId] ?? 0) <= uploader.retryLimit
-    );
-    // 过滤重新赋值后要重新获取
-    requestQueue = uploader.getRequestQueue(trackingId);
     if (ut.isEmpty([...hoardingQueue, ...requestQueue])) {
       return;
     }
     const eventData: EXTEND_EVENT =
       hoardingQueue.shift() ?? requestQueue.shift();
+    // 淘宝云函数是单条直发，不经过 Uploader.batchInvoke；事件从队列取出的这一刻
+    // 就已经冻结，必须在这里与标准批量链路保持一致地消费 originalSource。
+    uploader.prepareBatch(trackingId, [eventData]);
     let requestData = { ...eventData };
-    unset(requestData, ['requestId', 'trackingId']);
+    unset(requestData, ['requestId', 'trackingId', 'originalSourceId']);
     // 开启debug模式时，打印事件日志
     if (vdsConfig.debug) {
       console.log('[GrowingIO Debug]:', JSON.stringify(requestData, null, 2));
     }
-    emitter.emit(EMIT_MSG.ON_SEND_BEFORE, { requestData });
     this.cloudFuncInvoke(eventData, requestData);
   };
 
   // 云函数调用
   cloudFuncInvoke = (eventData: EXTEND_EVENT, requestData: EVENT) => {
-    const { vdsConfig, emitter, uploader } = this.growingIO;
-    const { serverUrl, projectId, tbConfig } = vdsConfig;
-    const app = ut.niceTry(() => getApp() ?? $global);
-    const cloud = tbConfig.cloud ?? app.cloud;
-    if (cloud?.function?.invoke) {
-      uploader.requestingNum += 1;
-      cloud.function
-        .invoke(
+    const { uploader } = this.growingIO;
+    uploader.sendExternalEvent(
+      [eventData],
+      requestData,
+      () => {
+        const { serverUrl, projectId, tbConfig } = this.growingIO.vdsConfig;
+        const app = ut.niceTry(() => getApp() ?? $global);
+        const cloud = tbConfig.cloud ?? app?.cloud;
+        if (!cloud?.function?.invoke) {
+          // 事件已进入本次发送尝试，但不能在此处直接丢弃；抛出后由上传器
+          // 统一回队、有限重试并释放请求槽位。
+          throw new Error('无法获取 cloud.function.invoke，请检查 tbConfig 配置项');
+        }
+        return cloud.function.invoke(
           tbConfig.cloudFuncName,
           {
             domain: serverUrl,
@@ -124,43 +126,30 @@ class GioTaobaoAdapter {
             body: requestData
           },
           tbConfig.cloudFuncHandler
-        )
-        .then((res) => {
-          uploader.requestingNum -= 1;
-          // 这里的返回值只是调用了api是否成功，真正是否上报成功不知道，要去淘宝控制台看
-          if (res.success) {
-            emitter.emit(EMIT_MSG.ON_SEND_AFTER, { result: res, requestData });
-          } else {
-            uploader.requestFailFn(eventData);
-            ut.consoleText(`请求失败! ${JSON.stringify(res)}`, 'error');
-          }
-          uploader.initiateRequest(eventData.trackingId);
-        })
-        .catch((e) => {
-          uploader.requestingNum -= 1;
-          uploader.requestFailFn(eventData);
-          ut.consoleText(`请求失败! ${JSON.stringify(e)}`, 'error');
-          uploader.initiateRequest(eventData.trackingId);
-        });
-    } else {
-      ut.consoleText(
-        '请求失败！无法获取 cloud 对象，请检查 tbConfig 配置项！',
-        'error'
-      );
-    }
+        );
+      },
+      // 云函数返回 success 只代表调用链路成功；服务端转发结果仍由云函数负责。
+      (result) => !!result?.success,
+      'taobao_cloud_function'
+    );
   };
 
   // 云应用调用
   tbCloudAppInvoke(eventsQueue: EXTEND_EVENT[], requestData: EVENT) {
-    const { vdsConfig, emitter, uploader } = this.growingIO;
-    const { serverUrl, projectId, tbConfig } = vdsConfig;
-    const app = ut.niceTry(() => getApp() ?? $global);
-    const cloud = tbConfig.cloud ?? app.cloud;
-    if (cloud?.application?.httpRequest) {
-      const trackingId = head(eventsQueue).trackingId;
-      uploader.requestingNum += 1;
-      cloud.application
-        .httpRequest({
+    const { uploader } = this.growingIO;
+    uploader.sendExternalEvent(
+      eventsQueue,
+      requestData,
+      () => {
+        const { serverUrl, projectId, tbConfig } = this.growingIO.vdsConfig;
+        const app = ut.niceTry(() => getApp() ?? $global);
+        const cloud = tbConfig.cloud ?? app?.cloud;
+        if (!cloud?.application?.httpRequest) {
+          throw new Error(
+            '无法获取 cloud.application.httpRequest，请检查 tbConfig 配置项'
+          );
+        }
+        return cloud.application.httpRequest({
           //不需要完整域名，只需要接口访问路径即可
           path: tbConfig.path,
           method: 'POST',
@@ -168,34 +157,12 @@ class GioTaobaoAdapter {
           params: { serverUrl, projectId, stm: Date.now() },
           body: requestData,
           exts: { cloudAppId: tbConfig.cloudAppId }
-        })
-        .then((res) => {
-          uploader.requestingNum -= 1;
-          // 这里的返回值只是调用了api是否成功，真正是否上报成功不知道，要看云应用的服务端是不是真的转发成功
-          if (res.success) {
-            emitter.emit(EMIT_MSG.ON_SEND_AFTER, { result: res, requestData });
-          } else {
-            eventsQueue.forEach((o: any) => {
-              uploader.requestFailFn(o);
-            });
-            ut.consoleText(`请求失败! ${JSON.stringify(res)}`, 'error');
-          }
-          uploader.initiateRequest(trackingId);
-        })
-        .catch((e) => {
-          uploader.requestingNum -= 1;
-          eventsQueue.forEach((o: any) => {
-            uploader.requestFailFn(o);
-          });
-          ut.consoleText(`请求失败! ${JSON.stringify(e)}`, 'error');
-          uploader.initiateRequest(trackingId);
         });
-    } else {
-      ut.consoleText(
-        '请求失败！无法获取 cloud 对象，请检查 tbConfig 配置项！',
-        'error'
-      );
-    }
+      },
+      // 云应用与云函数一致：这里只能确认云平台调用成功，真实转发结果由云侧负责。
+      (result) => !!result?.success,
+      'taobao_cloud_application'
+    );
   }
 }
 

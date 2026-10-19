@@ -1,5 +1,5 @@
 import { UserOptions } from '@@/types/base';
-import { EventHooksType } from '@@/types/eventHooks';
+import { EventHooksType, PageContext } from '@@/types/eventHooks';
 
 /**
  * 存储键类型
@@ -41,7 +41,9 @@ export interface DataStoreType {
   eventContextBuilder?: (
     trackingId: string,
     params?: any,
-    executeAttributes?: boolean
+    executeAttributes?: boolean,
+    /** PAGE/VISIT 已解析的页面快照；普通事件可省略并在构建器内解析 */
+    pageContext?: PageContext
   ) => any;
   /** 事件转换器 */
   eventConverter?: (event) => void;
@@ -61,6 +63,10 @@ export interface DataStoreType {
   getOption: (trackingId: string, k?: string) => OriginOptions;
   /** 获取原始来源 */
   getOriginalSource: (trackingId: string) => any;
+  /** 消费生成时绑定到当前入口的 VISIT；旧批次不能消费后来建立的入口。 */
+  consumeOriginalSource: (trackingId: string, events: import('./base').EXTEND_EVENT[]) => void;
+  /** 删除尚未被 VISIT 消费的原始来源 */
+  removeOriginalSource: (trackingId: string) => void;
   /** 获取 gsid */
   getGsid: (trackingId: string) => number;
   /** 设置 gsid */
@@ -68,7 +74,9 @@ export interface DataStoreType {
   /** 初始化追踪器配置 */
   initTrackerOptions: (userOptions: OriginOptions) => any;
   /** 初始化追踪器钩子 */
-  initTrackerHooker: (trackerOptions: OriginOptions) => void;
+  initTrackerHooker: (trackerOptions: OriginOptions) => boolean;
+  /** 在修改身份和宿主钩子前校验框架对象及适配器。 */
+  validateTrackerFramework: (trackerOptions: OriginOptions) => void;
   /** 初始化配置 */
   initOptions: (userOptions: OriginOptions) => OriginOptions;
   /** 初始化存储信息 */
@@ -95,8 +103,18 @@ export interface DataStoreType {
   sendVisit: (trackingId: string, props?: any) => void;
   /** 设置配置 */
   setOption: (trackingId: string, k: string, v: any) => boolean;
+  /** SDK 内部修改非公开配置，不能由公共 setOption 调用。 */
+  setInternalOption: (trackingId: string, k: string, v: any) => boolean;
+  /** 校验并规范化数据上报基础地址。 */
+  normalizeServerUrl: (serverUrl: any) => string;
   /** 设置原始来源 */
   setOriginalSource: (trackingId: string, origins: any) => void;
+  /** 按路径更新未消费的来源标题，不修改已经创建的 VISIT */
+  updateOriginalSourceTitle: (
+    trackingId: string,
+    path: string,
+    title: any
+  ) => boolean;
   /** 分享标识 */
   shareOut: boolean;
   /** 切换分享标识 */

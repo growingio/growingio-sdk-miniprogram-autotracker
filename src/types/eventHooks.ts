@@ -113,6 +113,35 @@ export interface PageShareResult {
 }
 
 /**
+ * 页面上下文
+ * path/query 来自同一页面位置，title 保留 master4.0 的实时页面取值规则。
+ */
+export interface PageContext {
+  /** 本次解析锁定的页面实例；可能来自显式参数、生命周期作用域或页面栈 */
+  page?: any;
+  /** 页面路径；保留平台原始格式，不做额外解码或统一斜杠处理 */
+  path: string;
+  /** 与 path 同一来源的序列化页面参数 */
+  query: string;
+  /** 解析时的实时页面标题；仅解析位置时为空，事件组装和拦截释放时重读 */
+  title: string;
+}
+
+/** 页面上下文解析参数 */
+export interface PageContextOptions {
+  /** 指定页面实例；自动 PAGE 使用触发生命周期的 Page */
+  page?: any;
+  /** 显式页面路径；VISIT、手动 PAGE 使用，存在即覆盖自动解析值 */
+  path?: string;
+  /** 显式页面参数；和显式 path 配套使用，允许明确传空值 */
+  query?: any;
+  /** 显式页面标题；存在即覆盖页面实例解析值 */
+  title?: string;
+  /** 仅解析页面位置时设为 false，标题留到事件组装阶段读取 */
+  resolveTitle?: boolean;
+}
+
+/**
  * 小程序页面类型接口
  */
 export interface MinipPageType {
@@ -128,20 +157,39 @@ export interface MinipPageType {
   currentLifecycle: string;
   /** 显示前的生命周期 */
   lifeBeforeShow: boolean;
+  /** 在指定页面的生命周期上下文中执行 */
+  withPageContext: <T>(page: any, callback: () => T) => T;
+  /** 获取当前生命周期页面 */
+  getContextPage: () => any;
+  /** 纯页面身份判断与路径解析，不回退页面栈 */
+  isPageTarget: (page: any) => boolean;
+  getPageIdentityPath: (page: any) => string;
+  /** 保存本实例的生命周期参数；导航标题维持按路由缓存的兼容规则 */
+  setPageQuery: (page: any, query: any, path?: string) => void;
+  setConfiguredTitle: (title: string) => void;
+  /** 解析同一来源的 path/query，并按既有规则获取 title */
+  getPageContext: (
+    trackingId?: string,
+    options?: PageContextOptions
+  ) => PageContext;
   /** 获取页面路径 */
-  getPagePath: () => string;
+  getPagePath: (page?: any) => string;
   /** 获取页面查询参数 */
-  getPageQuery: () => string;
+  getPageQuery: (page?: any, path?: string) => string;
   /** 获取页面标题 */
   getPageTitle: (trackingId?: string) => string;
   /** 获取来源页面 */
   getReferralPage: (trackingId: string) => string;
   /** 构建分享查询参数 */
-  buildShareQuery: (result: PageShareResult) => [string, string];
+  buildShareQuery: (
+    result: PageShareResult,
+    context?: PageContext
+  ) => [string, string];
   /** 更新分享结果 */
   updateShareResult: (
     result: PageShareResult,
-    fillParams?: boolean
+    fillParams?: boolean,
+    context?: PageContext
   ) => PageShareResult;
   /** 设置页面属性事件 */
   eventSetPageProps: (trackingId: string, event: EVENT) => any;

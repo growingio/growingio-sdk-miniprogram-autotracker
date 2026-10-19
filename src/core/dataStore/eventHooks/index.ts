@@ -164,12 +164,26 @@ class EventHooks implements EventHooksType {
     const self = this;
 
     return function (...args) {
+      // 安装钩子不等于初始化已提交。失败或准备中的包装器必须透明执行宿主代码。
+      if (!self.growingIO.gioSDKInitialized) {
+        return method.apply(this, args);
+      }
       let result;
 
       // 分享事件单独处理
       if (self.shareEventTypes.includes(eventName)) {
+        // 原生分享也可能先于页面栈切换；异步结果须保留发起页和默认分享参数。
+        const shareContext = niceTry(() =>
+          self.currentPage.getPageContext(self.growingIO.trackingId, {
+            page: this
+          })
+        );
+        const sharePage = shareContext?.page || this;
+        const withSharePage = (callback: () => any) =>
+          self.currentPage.withPageContext(sharePage, callback);
         // 先执行分享的生命周期拿到分享数据
-        const originResult = method.apply(this, args) ?? {};
+        const originResult =
+          withSharePage(() => method.apply(this, args)) ?? {};
 
         // sdk跟踪分享事件时才处理，否则直接返回原结果
         if (!self.growingIO.vdsConfig.followShare) {
@@ -192,12 +206,20 @@ class EventHooks implements EventHooksType {
                 ...promiseResult
               };
 
-              // 更新分享内容
-              const updatedResult =
-                self.currentPage.updateShareResult(mergedResult);
-
-              // 执行回调
-              self.lifeFcEffectsFn(this, args, cType, eventName, updatedResult);
+              withSharePage(() => {
+                const updatedResult = self.currentPage.updateShareResult(
+                  mergedResult,
+                  true,
+                  shareContext
+                );
+                self.lifeFcEffectsFn(
+                  this,
+                  args,
+                  cType,
+                  eventName,
+                  updatedResult
+                );
+              });
             } catch (error) {
               consoleText(error, 'error');
             }
@@ -242,18 +264,46 @@ class EventHooks implements EventHooksType {
           }
 
           // 直接返回原分享结果继续执行原逻辑
-          result = self.currentPage.updateShareResult(originResult, false);
+          result = withSharePage(() =>
+            self.currentPage.updateShareResult(
+              originResult,
+              false,
+              shareContext
+            )
+          );
         } else {
           // 没有异步逻辑，直接更新分享内容执行回调
-          result = self.currentPage.updateShareResult(originResult);
-          self.lifeFcEffectsFn(this, args, cType, eventName, result);
+          result = withSharePage(() => {
+            const updatedResult = self.currentPage.updateShareResult(
+              originResult,
+              true,
+              shareContext
+            );
+            return self.lifeFcEffectsFn(
+              this,
+              args,
+              cType,
+              eventName,
+              updatedResult
+            );
+          });
         }
       } else {
-        // 普通生命周期：先广播 xxx，再执行用户原方法，最后广播 xxxEnd。
-        const argsArray = self.getLifeArgs(args);
-        self.runLifeEffects(this, argsArray, cType, eventName);
-        result = method.apply(this, args);
-        self.emitLifeEnd(this, argsArray, cType, eventName);
+        // 只给原生 Page 生命周期绑定临时页面上下文。组件生命周期没有独立页面身份，
+        // 继续使用页面栈；分享生命周期有单独的异步处理，也不能复用这里的同步作用域。
+        // withPageContext 使用 try/finally，业务方法正常返回或抛错都不会把页面实例残留成全局状态。
+        const runLifecycle = () => {
+          // 普通生命周期：先广播 xxx，再执行用户原方法，最后广播 xxxEnd。
+          const argsArray = self.getLifeArgs(args);
+          // SDK 元数据/框架 getter 失败只能跳过采集，不能阻断业务生命周期。
+          niceTry(() => self.runLifeEffects(this, argsArray, cType, eventName));
+          result = method.apply(this, args);
+          niceTry(() => self.emitLifeEnd(this, argsArray, cType, eventName));
+          return result;
+        };
+        return cType === 'Page'
+          ? self.currentPage.withPageContext(this, runLifecycle)
+          : runLifecycle();
       }
 
       return result;
@@ -269,6 +319,9 @@ class EventHooks implements EventHooksType {
   customFcEffects = (eventName: string, method: any) => {
     const self = this;
     return function (...args) {
+      if (!self.growingIO.gioSDKInitialized) {
+        return method.apply(this, args);
+      }
       let result;
       if (
         self.growingIO.vdsConfig.autotrack &&
@@ -455,7 +508,11 @@ class EventHooks implements EventHooksType {
     if (designated.includes('App')) {
       try {
         // 重写App
-        if (platformHooks.App && !this.appHooked) {
+        if (
+          platformHooks.App &&
+          !this.appHooked &&
+          isFunction(this.originalApp)
+        ) {
           App = function (...args) {
             return self.originalApp(self.appOverriding(args[0]));
           };
@@ -468,7 +525,11 @@ class EventHooks implements EventHooksType {
     if (designated.includes('Page')) {
       try {
         // 重写Page
-        if (platformHooks.Page && !this.pageHooked) {
+        if (
+          platformHooks.Page &&
+          !this.pageHooked &&
+          isFunction(this.originalPage)
+        ) {
           Page = function (...args) {
             return self.originalPage(self.pageOverriding(args[0]));
           };
@@ -481,7 +542,11 @@ class EventHooks implements EventHooksType {
     if (designated.includes('Component')) {
       try {
         // 重写Component
-        if (platformHooks.Component && !this.componentHooked) {
+        if (
+          platformHooks.Component &&
+          !this.componentHooked &&
+          isFunction(this.originalComponent)
+        ) {
           Component = function (...args) {
             return self.originalComponent(self.componentOverriding(args[0]));
           };
@@ -494,7 +559,11 @@ class EventHooks implements EventHooksType {
     if (designated.includes('Behavior')) {
       try {
         // 重写Behavior
-        if (platformHooks.Behavior && !this.behaviorHooked) {
+        if (
+          platformHooks.Behavior &&
+          !this.behaviorHooked &&
+          isFunction(this.originalBehavior)
+        ) {
           Behavior = function (...args) {
             return self.originalBehavior(self.componentOverriding(args[0]));
           };
@@ -512,10 +581,21 @@ class EventHooks implements EventHooksType {
   initOriginalValue = () => {
     this.setAppEffectCbs();
     this.setPageEffectCbs();
-    this.originalApp = niceTry(() => App || global.App);
-    this.originalPage = niceTry(() => Page || global.Page);
-    this.originalComponent = niceTry(() => Component || global.Component);
-    this.originalBehavior = niceTry(() => Behavior || global.Behavior);
+    // 失败重试和多实例会再次初始化钩子，不能把 SDK 已包装的构造器重新记为原始值，
+    // 否则包装函数调用 originalApp/Page 时会变成自递归。首次不存在的构造器仍允许
+    // 在宿主就绪后补捕获；nativeGrowing 仅在取得有效原始函数后才安装包装。
+    if (!isFunction(this.originalApp)) {
+      this.originalApp = niceTry(() => App || global.App);
+    }
+    if (!isFunction(this.originalPage)) {
+      this.originalPage = niceTry(() => Page || global.Page);
+    }
+    if (!isFunction(this.originalComponent)) {
+      this.originalComponent = niceTry(() => Component || global.Component);
+    }
+    if (!isFunction(this.originalBehavior)) {
+      this.originalBehavior = niceTry(() => Behavior || global.Behavior);
+    }
   };
 
   /**

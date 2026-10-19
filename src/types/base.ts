@@ -203,6 +203,8 @@ export interface EVENT {
  * 扩展事件接口
  */
 export interface EXTEND_EVENT extends EVENT {
+  /** Internal entry ownership; removed before transport serialization. */
+  originalSourceId?: number;
   /** 请求 ID */
   requestId: string;
   /** 实例 ID */

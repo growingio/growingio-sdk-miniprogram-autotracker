@@ -20,8 +20,10 @@ import {
   guid,
   limitObject,
   niceCallback,
+  niceTry,
   qsParse
 } from '@@/utils/tools';
+import { emitSafely } from '@@/utils/safeEmitter';
 import { ALLOW_SET_OPTIONS, DEFAULT_SETTINGS } from '@@/constants/config';
 import { DataStoreType, OriginOptions } from '@@/types/dataStore';
 import { FRAMEWORKS, PLATFORMTYPES } from '@@/types/platforms';
@@ -68,6 +70,7 @@ class GrowingIO implements GrowingIOType {
   public subInstance: any;
   private _identified: boolean;
   constructor() {
+    this.gioSDKInitialized = false;
     this.utils = { ...glodash, ...tools, qs };
     this.emitter = mitt();
     // 小程序平台
@@ -116,9 +119,25 @@ class GrowingIO implements GrowingIOType {
    * @returns {boolean} - 初始化结果
    */
   init = (options: any) => {
-    // 初始化实例之前
-    this.emitter.emit(EMIT_MSG.ON_SDK_INITIALIZE_BEFORE, { options });
+    const trackingId = options?.trackingId;
+    const globalContext = getGlobal();
+    const previous = {
+      trackingId: this.trackingId,
+      vdsConfig: this.vdsConfig,
+      initialized: this.gioSDKInitialized,
+      inPlugin: this.inPlugin,
+      canHook: this.platformConfig.canHook,
+      subConfig: this.subInstance?.[trackingId],
+      globalConfig: globalContext.vdsConfig,
+      globalSubInstances: globalContext.vdsConfig?.subInstance,
+      globalSubConfig: globalContext.vdsConfig?.subInstance?.[trackingId]
+    };
+    const wasTrackerInitialized =
+      this.dataStore.initializedTrackingIds.includes(trackingId);
+    let vdsConfig: OriginOptions;
     try {
+      // 多实例等扩展需要在准备配置前安装核心行为，失败仍属于未提交初始化。
+      this.emitter.emit(EMIT_MSG.ON_SDK_INITIALIZE_BEFORE, { options });
       consoleText('Gio小程序SDK 初始化中...', 'info');
       // 框架包可能被误放入不支持的平台。构造阶段保持安全，初始化阶段明确失败，
       // 避免 SDK 抛异常影响宿主应用，同时也不误上报不完整数据。
@@ -139,40 +158,79 @@ class GrowingIO implements GrowingIOType {
         throw new Error('您正在尝试初始化另一个实例，请集成多实例插件后重试!');
       }
       // 初始化实例配置
-      const vdsConfig = this.dataStore.initTrackerOptions(options);
-      // 广播基础配置初始化完成
-      this.emitter?.emit(EMIT_MSG.OPTION_INITIALIZED, vdsConfig);
-      // 标记SDK已初始化完成
-      this.gioSDKInitialized = true;
+      vdsConfig = this.dataStore.initTrackerOptions(options);
+      // 配置已备好，适配器可据此准备身份继承等扩展；此时尚未取得采集资格。
+      emitSafely(this.emitter, EMIT_MSG.OPTION_INITIALIZED, vdsConfig);
       // 初始化实例hooker
-      this.dataStore.initTrackerHooker(vdsConfig);
-      // 手动初始化用户信息
+      if (!this.dataStore.initTrackerHooker(vdsConfig)) {
+        throw new Error('SDK 框架适配初始化失败，已停止采集以避免假成功');
+      }
+      // 存储和身份是核心准备步骤，不能依赖可被观察者打断的完成广播。
+      this.dataStore.initStorageInfo(trackingId);
       if (this.gioPlatform !== 'quickapp') {
-        this.userStore.initUserInfo(options.trackingId);
+        this.userStore.initUserInfo(trackingId);
       }
-      // 广播SDK初始化完成
-      this.emitter.emit(EMIT_MSG.SDK_INITIALIZED, vdsConfig);
-      // 初始化完成后把实例注入到小程序全局
-      if (!this.trackingId || this.trackingId === options.trackingId) {
-        // ?直接挂载对象，存在问题：Page.data 触发深拷贝 存在循环引用会导致死循环
-        getGlobal().__gio__ = () => this;
-      }
-      consoleText('Gio小程序SDK 初始化完成！', 'success');
-      // 在插件中手动触发visit
-      if (this.inPlugin && this.minipInstance.platform !== 'tbp') {
-        this.dataStore.sendVisit(vdsConfig.trackingId);
-      }
-      if (this.vdsConfig.forceLogin) {
-        consoleText(
-          'forceLogin已开启，请调用 identify 方法设置 openId 以继续上报!',
-          'info'
-        );
-      }
-      return true;
     } catch (error) {
+      // 只回滚本次尚未成功的实例。子实例初始化失败不能关闭已成功的主实例，
+      // 也不能把半初始化配置留在子实例集合中，影响之后的重试和事件广播。
+      if (
+        !wasTrackerInitialized &&
+        !this.dataStore.initializedTrackingIds.includes(trackingId)
+      ) {
+        this.gioSDKInitialized = !!previous.initialized;
+        this.trackingId = previous.trackingId;
+        this.vdsConfig = previous.vdsConfig;
+        this.inPlugin = previous.inPlugin;
+        this.platformConfig.canHook = previous.canHook;
+        if (this.subInstance) {
+          if (previous.subConfig === undefined) {
+            unset(this.subInstance, trackingId);
+          } else {
+            this.subInstance[trackingId] = previous.subConfig;
+          }
+        }
+        globalContext.vdsConfig = previous.globalConfig;
+        if (previous.globalConfig) {
+          if (previous.globalSubInstances) {
+            if (previous.globalSubConfig === undefined) {
+              unset(previous.globalSubInstances, trackingId);
+            } else {
+              previous.globalSubInstances[trackingId] =
+                previous.globalSubConfig;
+            }
+            previous.globalConfig.subInstance = previous.globalSubInstances;
+          } else {
+            unset(previous.globalConfig, 'subInstance');
+          }
+        }
+      }
       consoleText(error, 'error');
       return false;
     }
+
+    // 一次提交采集资格。SDK 完成通知与首次事件失败不能撤销成功。
+    this.dataStore.initializedTrackingIds.push(trackingId);
+    this.gioSDKInitialized = true;
+    emitSafely(this.emitter, EMIT_MSG.SDK_INITIALIZED, vdsConfig);
+    niceTry(() => {
+      if (!this.trackingId || this.trackingId === trackingId) {
+        // 使用函数避免 Page.data 深拷贝 SDK 对象时遇到循环引用。
+        globalContext.__gio__ = () => this;
+      }
+    });
+    niceTry(() => consoleText('Gio小程序SDK 初始化完成！', 'success'));
+    if (this.inPlugin && this.minipInstance.platform !== 'tbp') {
+      niceTry(() => this.dataStore.sendVisit(vdsConfig.trackingId));
+    }
+    if (this.vdsConfig.forceLogin) {
+      niceTry(() =>
+        consoleText(
+          'forceLogin已开启，请调用 identify 方法设置 openId 以继续上报!',
+          'info'
+        )
+      );
+    }
+    return true;
   };
 
   /**
@@ -232,7 +290,9 @@ class GrowingIO implements GrowingIOType {
   setOption = (trackingId: string, k: string, v: any) => {
     if (keys(ALLOW_SET_OPTIONS).includes(k)) {
       if (typeOf(v) === DEFAULT_SETTINGS[k]?.type) {
-        this.dataStore.setOption(trackingId, k, v);
+        if (!this.dataStore.setOption(trackingId, k, v)) {
+          return false;
+        }
         consoleText(`已修改${ALLOW_SET_OPTIONS[k]}: ${v}`, 'info');
         return true;
       } else {
@@ -343,18 +403,17 @@ class GrowingIO implements GrowingIOType {
       }
       // 截取长度
       const asId = toString(assignmentId).slice(0, 1000);
-      // 在之后的请求中使用assignmentId作为uid(deviceId)使用
-      this.userStore.setUid(asId);
-      // 修改forceLogin配置项
-      this.dataStore.setOption(this.trackingId, 'forceLogin', false);
-      // 标记当前已被identify过
-      this._identified = true;
-      // 为已积压的请求使用assignmentId全部赋值deviceId
-      this.dataStore.trackersExecute((tid: string) => {
-        const hq = this.uploader.getHoardingQueue(tid);
-        hq.forEach((o, i) => (hq[i].deviceId = asId));
-        // 发送积压队列中的请求
-        this.uploader.initiateRequest(tid, true);
+      this.userStore.runIdentityTransaction(trackingId, () => {
+        // 身份通知必须看到已解除 forceLogin 的完整状态。
+        this.userStore.setUid(asId);
+        this.dataStore.setInternalOption(this.trackingId, 'forceLogin', false);
+        this._identified = true;
+        // 为已积压的请求使用assignmentId全部赋值deviceId
+        this.dataStore.trackersExecute((tid: string) => {
+          const hq = this.uploader.getHoardingQueue(tid);
+          hq.forEach((o, i) => (hq[i].deviceId = asId));
+          this.uploader.initiateRequest(tid, true);
+        });
       });
     } else if (this._identified) {
       callError('identify', !1, '请勿重复调用');
@@ -407,9 +466,8 @@ class GrowingIO implements GrowingIOType {
     if (verifyId(userId)) {
       // 切换userId要重设session补发visit
       const prevId = this.userStore.getGioId(trackingId);
-      userId = toString(userId).slice(0, 1000);
+      const processedUserId = toString(userId).slice(0, 1000);
       userKey = toString(userKey).slice(0, 1000);
-      this.userStore.setUserId(trackingId, userId);
       let processedUserKey =
         !isNil(userKey) && toString(userKey).length > 0
           ? toString(userKey).slice(0, 1000)
@@ -419,11 +477,14 @@ class GrowingIO implements GrowingIOType {
         consoleText('您设置了 userKey ，请初始化开启 idMapping!', 'warn');
         processedUserKey = '';
       }
-      this.userStore.setUserKey(trackingId, processedUserKey);
-      // 切换userId时重置session
-      if (prevId && prevId !== userId) {
-        this.userStore.setSessionId(trackingId);
-      }
+      this.userStore.runIdentityTransaction(trackingId, () => {
+        this.userStore.setUserId(trackingId, processedUserId);
+        this.userStore.setUserKey(trackingId, processedUserKey);
+        // 切换userId时重置session
+        if (prevId && prevId !== processedUserId) {
+          this.userStore.setSessionId(trackingId);
+        }
+      });
     } else {
       callError('setUserId');
     }
@@ -434,8 +495,10 @@ class GrowingIO implements GrowingIOType {
    * @param {string} trackingId - 实例 ID
    */
   clearUserId = (trackingId: string) => {
-    this.userStore.setUserId(trackingId, undefined);
-    this.userStore.setUserKey(trackingId, undefined);
+    this.userStore.runIdentityTransaction(trackingId, () => {
+      this.userStore.setUserId(trackingId, undefined);
+      this.userStore.setUserKey(trackingId, undefined);
+    });
   };
 
   /**
@@ -748,13 +811,18 @@ class GrowingIO implements GrowingIOType {
       extraParams,
       ignoreFields
     } = this.dataStore.getTrackerVds(trackingId);
+    // 先确定设备是否首次创建；随后创建的首个 session 才能正确继承该状态。
+    const deviceId = getUid();
+    const sessionId = getSessionId(trackingId);
     const infos: any = {
       gioappid: appId,
       giocs1: getUserId(trackingId) || '',
       gioplatform: this.platformConfig.platform,
       gioprojectid: projectId,
-      gios: getSessionId(trackingId),
-      giou: getUid()
+      gios: sessionId,
+      giou: deviceId,
+      // 内嵌 Web 的 AB 分流必须继承小程序本次设备创建状态，不能用 H5 自己的设备首次标记。
+      gionewdevice: this.userStore.isNewDeviceInSession(trackingId)
     };
     infos.giodatacollect = dataCollect;
     infos.giodatasourceid = dataSourceId;

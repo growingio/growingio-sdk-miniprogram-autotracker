@@ -1,8 +1,27 @@
+export interface IdentitySnapshot {
+  readonly deviceId: string;
+  readonly userId: string;
+  readonly userKey: string;
+  readonly gioId: string;
+  readonly sessionId?: string;
+  readonly revision: number;
+}
+
 /**
  * 用户存储类型接口
  * @interface UserStoreType
  */
 export interface UserStoreType {
+  /** 合并完整身份写入的通知；回调的结果及异常保持原样。 */
+  runIdentityTransaction: <T>(trackingId: string, callback: () => T) => T;
+  /** 只读取已加载身份，不恢复存储或生成设备、会话。 */
+  getIdentitySnapshot: (trackingId: string) => IdentitySnapshot;
+  /** 只读取当前会话缓存，不恢复或生成会话。 */
+  getSessionSnapshot: (trackingId: string) => string | undefined;
+  /** 当前安装是否在本次运行中首次生成了设备 ID。 */
+  isNewDevice: boolean;
+  /** 当前实例的 session 是否仍是该设备首次创建时的 session。 */
+  isNewDeviceInSession: (trackingId: string) => boolean;
   /**
    * 获取设备 Id
    * @returns {string} 设备 ID
@@ -13,6 +32,8 @@ export interface UserStoreType {
    * @param {string} id 设备 ID
    */
   setUid: (id: string) => void;
+  /** 恢复已存在的持久 UID，并校正异步恢复前暂定的设备首访状态。 */
+  restoreUid: (id: string) => void;
   /**
    * 获取 sessionId
    * @param {string} trackingId 跟踪器 ID

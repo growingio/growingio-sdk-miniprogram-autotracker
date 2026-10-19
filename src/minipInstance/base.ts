@@ -15,7 +15,9 @@ import {
   isArray
 } from '@@/utils/glodash';
 import EMIT_MSG from '@@/constants/emitMsg';
+import { getPageIdentityPath } from '@@/utils/pageContext';
 import {
+  consoleText,
   limitString,
   niceTry,
   getPlainMinip,
@@ -32,6 +34,8 @@ class BaseInstance implements MinipInstanceType {
   public appSource: AppSource;
   public systemInfo: any;
   public network: any;
+  // App onShow 会多次触发；网络监听只需注册一次，避免重复回调和资源泄漏。
+  protected networkStatusListenerRegistered = false;
 
   constructor(public growingIO: GrowingIOType) {
     const {
@@ -92,13 +96,11 @@ class BaseInstance implements MinipInstanceType {
         enumerable: true,
         configurable: true,
         value: function () {
+          const { title } = arguments[0] || {};
           if (self.growingIO.gioSDKInitialized) {
-            // 这个currentPath一般认为是在onLoad中获取的当前小程序页面的path，此时SDK还没有parse，保存的还是上一个页面的信息
-            const currentPath = self.getCurrentPath();
-            const { title } = arguments[0] || {};
-            self.growingIO.dataStore.eventHooks.currentPage.configuredTitle[
-              currentPath
-            ] = title;
+            niceTry(() => {
+              self.growingIO.dataStore.eventHooks.currentPage.setConfiguredTitle(title);
+            });
           }
           return originSetter.apply(this, arguments);
         }
@@ -133,13 +135,14 @@ class BaseInstance implements MinipInstanceType {
 
   /**
    * 获取当前页面路由
+   * @param {any} [page] - 指定页面实例
    * @returns {string} - 当前页面路由
    */
-  getCurrentPath = () => {
-    const currentPage = this.getCurrentPage();
-    // wx/my取route; swan取uri; tt取__route__; qq无值
+  getCurrentPath = (page?: any) => {
+    // 调用方已经拿到生命周期 page 时直接读取它；只有传入对象没有页面身份时，
+    // 才保持原逻辑回退页面栈。这样普通组件不会被误当页面，也不会忽略有效 page 参数。
     return (
-      currentPage?.route || currentPage?.uri || currentPage?.__route__ || ''
+      getPageIdentityPath(page) || getPageIdentityPath(this.getCurrentPage())
     );
   };
 
@@ -149,6 +152,8 @@ class BaseInstance implements MinipInstanceType {
    * @returns {string} - 页面标题
    */
   getPageTitle = (page) => {
+    // 保留 master4.0 的优先级；入口兜底只修改局部路径，不补写宿主 route。
+    let pageRoute = getPageIdentityPath(page) || page?.route;
     const platform = getPlainPlatform();
     let title = '';
     let instConfig = getPlainConfig(platform);
@@ -157,7 +162,7 @@ class BaseInstance implements MinipInstanceType {
     }
     // 第一优先级在base中的hook setNavigationBarTitle设置的值(在dataStore page实例中实现，准确率最高)
     // 第二优先级支持客户自己在页面中设置页面title（保持3.8的向下兼容，不准确但优先级高）
-    const data = page?.data || page.$data || {};
+    const data = page?.data || page?.$data || {};
     title = isString(data?.gioPageTitle) ? data?.gioPageTitle : '';
 
     let instPage;
@@ -167,7 +172,7 @@ class BaseInstance implements MinipInstanceType {
       niceTry(() => {
         const instAppCode = getPlainAppCode(platform);
         if (instAppCode) {
-          instPage = instAppCode[`${page.route}.json`] || {};
+          instPage = instAppCode[`${pageRoute}.json`] || {};
           title =
             instPage?.navigationBarTitleText || // wx/qq/jd
             instPage?.mod?.exports?.navigationBarTitleText; // ks
@@ -177,23 +182,23 @@ class BaseInstance implements MinipInstanceType {
     if (!title && instConfig) {
       // 第四优先级在app生命周期中拿不到page对象，拿生命周期的参数来匹配
       const { enterParams } = this.growingIO.dataStore.eventHooks.appEffects;
-      if (!page.route && !isEmpty(enterParams)) {
-        page.route = enterParams.path || '';
-        title = page.route
-          ? this._getTitleFromTabBar(instConfig, page.route)
+      if (!pageRoute && !isEmpty(enterParams)) {
+        pageRoute = enterParams.path || '';
+        title = pageRoute
+          ? this._getTitleFromTabBar(instConfig, pageRoute)
           : '';
       }
 
       // 第五优先级存在pages数组或page对象时尝试从page中匹配（大概率匹配不到，跟框架有关）
       if (!title) {
         if (isArray(instConfig.pages)) {
-          instPage = instConfig.pages.find((o) => o.path === page.route) ?? {};
+          instPage = instConfig.pages.find((o) => o.path === pageRoute) ?? {};
         } else {
           instPage = instConfig.page || {};
         }
         if (instPage) {
           const pageInfo =
-            instPage[page.route] || instPage[`${page.route}.html`] || instPage;
+            instPage[pageRoute] || instPage[`${pageRoute}.html`] || instPage;
           title =
             pageInfo?.navigationBarTitleText ||
             pageInfo?.window?.navigationBarTitleText;
@@ -202,7 +207,7 @@ class BaseInstance implements MinipInstanceType {
 
       // 第六优先级取tabBar配置匹配（只有tabbar的4个页面有机会）
       if (!title) {
-        title = this._getTitleFromTabBar(instConfig, page.route);
+        title = this._getTitleFromTabBar(instConfig, pageRoute);
       }
     }
 
@@ -247,6 +252,9 @@ class BaseInstance implements MinipInstanceType {
     let value = this.minip?.getStorageSync(key);
     if (isObject(value) && value.expiredAt) {
       if (value.expiredAt < Date.now()) {
+        // 过期不仅是本次读取未命中，还要物理删除存储，
+        // 避免残留封装反复被 AB 缓存和其他调用方判定为存在。
+        this.removeStorageSync(key);
         return '';
       } else {
         return value.value;
@@ -335,14 +343,6 @@ class BaseInstance implements MinipInstanceType {
       fail,
       complete
     });
-    // 设置超时中断请求
-    let t = setTimeout(() => {
-      if (requestTask?.abort && isFunction(requestTask?.abort)) {
-        requestTask?.abort();
-      }
-      clearTimeout(t);
-      t = null;
-    }, (timeout || 10000) + 10);
     return requestTask;
   };
 
@@ -374,14 +374,23 @@ class BaseInstance implements MinipInstanceType {
    * 监听网络变更
    */
   setNetworkStatusListener = () => {
-    this.minip?.onNetworkStatusChange(({ networkType }) => {
-      if (networkType) {
-        if (!this.network || !isObject(this.network)) {
-          this.network = {};
+    if (this.networkStatusListenerRegistered) return;
+    const onNetworkStatusChange = this.minip?.onNetworkStatusChange;
+    if (!isFunction(onNetworkStatusChange)) return;
+    try {
+      onNetworkStatusChange.call(this.minip, ({ networkType }) => {
+        if (networkType) {
+          if (!this.network || !isObject(this.network)) {
+            this.network = {};
+          }
+          this.network.networkType = networkType;
         }
-        this.network.networkType = networkType;
-      }
-    });
+      });
+      this.networkStatusListenerRegistered = true;
+    } catch (error) {
+      // 网络状态只是事件上下文的附加字段；订阅失败不得打断 App onShow。
+      consoleText(error, 'warn');
+    }
   };
 }
 

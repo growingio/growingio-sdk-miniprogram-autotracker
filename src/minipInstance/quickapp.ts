@@ -1,6 +1,6 @@
 import { GrowingIOType } from '@@/types/growingIO';
 import { isObject, isString, last } from '@@/utils/glodash';
-import { limitString, niceTry } from '@@/utils/tools';
+import { consoleText, limitString, niceTry } from '@@/utils/tools';
 import { SystemInfo } from '@@/types/minipInstance';
 import app from '@system.app';
 import BaseImplements from './base';
@@ -23,6 +23,7 @@ class QuickApp extends BaseImplements {
   private storageCache: Record<string, any> = {};
   private pendingStorageWrites: Record<string, any> = {};
   private pendingStorageDeletes: Record<string, boolean> = {};
+  private hasPersistedUid = false;
 
   constructor(public growingIO: GrowingIOType) {
     super(growingIO);
@@ -163,6 +164,7 @@ class QuickApp extends BaseImplements {
         storage.get({
           key,
           success: (result: any) => {
+            if (settled) return;
             const value = result?.data ?? result;
             const hasPendingWrite = Object.prototype.hasOwnProperty.call(
               this.pendingStorageWrites,
@@ -170,12 +172,13 @@ class QuickApp extends BaseImplements {
             );
             if (
               !this.pendingStorageDeletes[key] &&
-              (!hasPendingWrite || preferPersisted) &&
+              (!hasPendingWrite || (preferPersisted && !!value)) &&
               value !== undefined &&
               value !== null
             ) {
               this.storageCache[key] = value;
-              if (preferPersisted) {
+              if (preferPersisted && value) {
+                this.hasPersistedUid = true;
                 delete this.pendingStorageWrites[key];
               }
             }
@@ -206,11 +209,17 @@ class QuickApp extends BaseImplements {
     await Promise.all(
       storageKeys.map((key, index) => this.loadStorageValue(key, index === 0))
     );
-    // 标记身份已就绪，再从缓存恢复稳定 uid；没有持久值时才生成新 uid。
-    this.identityReady = true;
-    userStore._uid = undefined;
-    trackingIds.forEach((trackingId: string) => {
-      niceTry(() => userStore.initUserInfo(trackingId));
+    // UID 和所有实例字段一次提交，恢复通知的回调只能看到完整身份。
+    userStore.runIdentityTransaction(this.growingIO.trackingId, () => {
+      this.identityReady = true;
+      if (this.hasPersistedUid) {
+        userStore.restoreUid(this.getStorageSync(uidKey));
+      } else {
+        userStore._uid = undefined;
+      }
+      trackingIds.forEach((trackingId: string) => {
+        niceTry(() => userStore.initUserInfo(trackingId));
+      });
     });
   };
 
@@ -330,16 +339,31 @@ class QuickApp extends BaseImplements {
 
   // 监听网络变更
   setNetworkStatusListener = () => {
-    network.subscribe({
-      callback: (data) => {
-        if (data.type) {
-          if (!this.network || typeof this.network !== 'object') {
-            this.network = {};
+    // optional chaining 无法保护“network 这个全局变量本身不存在”的场景；
+    // 先用 typeof 避免低版本快应用在 App.onShow 中抛 ReferenceError。
+    if (
+      this.networkStatusListenerRegistered ||
+      typeof network === 'undefined' ||
+      !network.subscribe
+    ) {
+      return;
+    }
+    try {
+      network.subscribe({
+        callback: (data) => {
+          if (data.type) {
+            if (!this.network || typeof this.network !== 'object') {
+              this.network = {};
+            }
+            this.network.networkType = data.type;
           }
-          this.network.networkType = data.type;
         }
-      }
-    });
+      });
+      this.networkStatusListenerRegistered = true;
+    } catch (error) {
+      // 快应用网络订阅不可用时保留已有网络元数据，不影响前台生命周期和事件发送。
+      consoleText(error, 'warn');
+    }
   };
 }
 

@@ -116,7 +116,7 @@ export interface MinipInstanceType {
     fail,
     success,
     complete
-  }: any) => void;
+  }: any) => any;
   /** 获取小程序系统信息 */
   getSystemInfo?: () => Promise<SystemInfo>;
   /** 监听网络变更 */

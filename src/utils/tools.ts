@@ -593,9 +593,11 @@ export const qsParse = (s: string) => {
   }
   const qsObject = {};
   s.split('&').forEach((pairs: string) => {
-    const pair = pairs.split('=');
-    if (pair[0]) {
-      qsObject[pair[0]] = pair[1];
+    // 参数值可能是 URL 或 base64，只把第一个等号作为键值分隔符。
+    const separator = pairs.indexOf('=');
+    const key = separator < 0 ? pairs : pairs.slice(0, separator);
+    if (key) {
+      qsObject[key] = separator < 0 ? undefined : pairs.slice(separator + 1);
     }
   });
   return qsObject;
@@ -638,7 +640,7 @@ export const getExtraData = (data: any) => {
 /**
  * 清理参数中的非法字段
  * @param {any} [originQuery={}] - 原始查询参数，可以是对象或参数字符串
- * @param {any} [extraData={}] - 额外数据，可以是对象或参数字符串
+ * @param {any} [extraData={}] - 额外数据，可以是对象或 JSON 对象字符串
  * @returns {object} - 清理后的纯净参数对象
  */
 const dirtyKey = [
@@ -651,10 +653,11 @@ export const getPureParams = (originQuery: any = {}, extraData: any = {}) => {
   const parsedOriginQuery =
     typeof originQuery === 'string' ? qsParse(originQuery) : originQuery || {};
 
-  // 递归清理函数
+  // 仅参数对象可以参与合并。字符串或数组直接进入 Object.assign 会按索引
+  // 展开成 0、1 等脏参数，日志占位字符串 <Undefined> 也不能视为参数对象。
   function cleanObject(obj, needCompare) {
     if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
-      return obj;
+      return {};
     }
 
     const result = {};
@@ -687,6 +690,6 @@ export const getPureParams = (originQuery: any = {}, extraData: any = {}) => {
   return Object.assign(
     {},
     cleanObject(parsedOriginQuery, false),
-    cleanObject(extraData, true)
+    cleanObject(getExtraData(extraData), true)
   );
 };

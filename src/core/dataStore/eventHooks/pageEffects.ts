@@ -1,4 +1,4 @@
-import { get, isEmpty, isFunction, unset } from '@@/utils/glodash';
+import { get, has, isEmpty, isFunction } from '@@/utils/glodash';
 import { GrowingIOType } from '@@/types/growingIO';
 import { PageHookLifeCircle } from '@@/types/eventHooks';
 import EMIT_MSG from '@@/constants/emitMsg';
@@ -50,7 +50,11 @@ class PageEffects {
     // 极少数情况下拿不到稳定页面实例，这时再退回到 event + path 的弱去重兜底，
     // 继续保留原先“防重复注入”的能力，但把误伤范围控制在同一路径内。
     const path =
-      page?.route || page?.uri || page?.__route__ || page?.$page?.fullPath || '';
+      page?.route ||
+      page?.uri ||
+      page?.__route__ ||
+      page?.$page?.fullPath ||
+      '';
     this.prevEvent[`${event}:${path}`] = timestamp;
   };
 
@@ -71,7 +75,7 @@ class PageEffects {
       dataStore: {
         getTrackerVds,
         getOriginalSource,
-        setOriginalSource,
+        updateOriginalSourceTitle,
         trackersExecute,
         eventHooks,
         toggleShareOut,
@@ -84,11 +88,9 @@ class PageEffects {
     if (!page) {
       page = minipInstance.getCurrentPage();
     }
-    if (!page.route) {
-      page.route = minipInstance.getCurrentPath(page);
-    }
-    const path =
-      page.route || page.uri || page.__route__ || page?.$page?.fullPath || '';
+    // 生命周期回调中的 page 才是这次事件的权威页面。统一解析器会兼容各平台路由字段，
+    // 不再像旧逻辑那样给宿主对象补写 route，也不会在页面栈尚未更新时误用上一页。
+    const path = currentPage.getPagePath(page);
     const dedupeKey = `${event}:${path}`;
     const bucket = this.getPrevEventBucket(page);
     const prevEventTime = bucket ? bucket[event] : this.prevEvent[dedupeKey];
@@ -119,35 +121,36 @@ class PageEffects {
     currentPage.currentLifecycle = event;
     switch (event) {
       case pageListeners.pageLoad: {
-        // 获取一次页面参数存起来，防止类似支付宝小程序只能通过生命周期获取页面参数或页面堆栈拿不到页面参数，做兜底
-        currentPage.queryOptions[path] =
-          get(page, 'options') ||
-          get(page, '__displayReporter.query') ||
-          get(page, '$page.query') ||
-          get(page, '$wx.__displayReporter.query') ||
-          get(page, '$taroParams') ||
-          args[0] ||
-          {};
-        unset(currentPage.queryOptions[path], [
-          '$taroTimestamp',
-          'gdpCircleRoomCollectUrl'
-        ]);
+        // 获取一次页面参数存起来，防止支付宝等平台离开 onLoad 后无法再取得 query。
+        // 使用第一个非空来源而不是普通的 ||/??：空 options 不能遮挡后面的有效参数。
+        // 保存副本后再删除 SDK 内部参数，不能直接修改框架传入的 options/query 对象。
+        const queryOptions = [
+          get(page, 'options'),
+          get(page, '__displayReporter.query'),
+          get(page, '$page.query'),
+          get(page, '$wx.__displayReporter.query'),
+          get(page, '$taroParams'),
+          args[0]
+        ].find((params) => !isEmpty(params));
+        currentPage.setPageQuery(page, queryOptions || {}, path);
         break;
       }
       case pageListeners.pageShow: {
         trackersExecute((trackingId: string) => {
-          // 检查originalSource内容是否已经被消费，如果没有被消费是同一个页面，说明visit还没被发出去，要更新title
+          // 沿用 master4.0：onShow 采集前只更新未消费的来源缓存，
+          // 不修改已经创建、转换或进入请求队列的 VISIT。
           const originalSource = getOriginalSource(trackingId);
           if (!isEmpty(originalSource) && originalSource.path === path) {
-            setOriginalSource(trackingId, {
-              ...originalSource,
-              title: currentPage.getPageTitle()
-            });
+            updateOriginalSourceTitle(
+              trackingId,
+              path,
+              currentPage.getPageTitle()
+            );
           }
           // 发page事件
           const { trackPage } = getTrackerVds(trackingId);
           if (trackPage) {
-            this.buildPageEvent(trackingId);
+            this.buildPageEvent(trackingId, undefined, page);
           }
         });
         // 分享标记置为false
@@ -220,8 +223,9 @@ class PageEffects {
    * 构建页面访问事件
    * @param {string} trackingId - 实例 ID
    * @param {any} [props] - 属性
+   * @param {any} [page] - 触发生命周期的页面实例
    */
-  buildPageEvent = (trackingId: string, props?: any) => {
+  buildPageEvent = (trackingId: string, props?: any, page?: any) => {
     const {
       dataStore: {
         eventContextBuilder,
@@ -229,14 +233,31 @@ class PageEffects {
         eventHooks: { currentPage }
       }
     } = this.growingIO;
+    // 自动 PAGE 传入真实生命周期 page；手动 PAGE 可以覆盖 path/query/title。
+    // 如果手动指定了新 path 却没提供 query，明确使用空 query，不能沿用当前页面参数。
+    const pageContextOptions: any = { page, resolveTitle: false };
+    if (!isEmpty(props)) {
+      if (has(props, 'path')) {
+        pageContextOptions.path = props.path;
+        pageContextOptions.query = has(props, 'query') ? props.query : '';
+      } else if (has(props, 'query')) {
+        pageContextOptions.query = props.query;
+      }
+    }
+    const pageContext = currentPage.getPageContext(
+      trackingId,
+      pageContextOptions
+    );
+    // PAGE 的位置来自触发生命周期或手动指定的页面；标题沿用既有实时取值。
+    // 进入拦截队列后，释放时仍按 master4.0 重读标题。
     const event = {
       eventType: 'PAGE',
       referralPage: currentPage.getReferralPage(trackingId),
-      ...eventContextBuilder(trackingId)
+      ...eventContextBuilder(trackingId, undefined, true, pageContext)
     };
     // 合并页面属性
     event.attributes = currentPage.eventSetPageProps(trackingId, event);
-    // 传入参数生成的page事件取值为传入参数
+    // 与 master4.0 一样，显式标题在通用字段过滤和属性求值后覆盖。
     if (!isEmpty(props) && props.title) {
       event.title = props.title;
     }

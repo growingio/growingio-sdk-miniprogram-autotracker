@@ -400,15 +400,17 @@ export default class Monitor {
    */
   private cachePageContext = (path: string) => {
     const { currentPage } = this.growingIO.dataStore.eventHooks;
-    const currentPath = currentPage.getPagePath();
+    // 一次性读取 path/query/title，避免性能 observer 的异步回调跨页后分别取到不同页面。
+    // 只有快照 path 与性能记录所属 path 一致时，才缓存该页的 query/title。
+    const currentContext = currentPage.getPageContext();
     this.ensurePagePerf(path);
     this.pagePerf[path] = {
       ...this.pagePerf[path],
       pagePath: path,
       // 只有 currentPage 仍然指向当前 path 时，query / title 才可信。
       // 已经切到别的页面时宁可保留空字符串，也不要写入别的页面信息。
-      pageQuery: currentPath === path ? currentPage.getPageQuery() : '',
-      pageTitle: currentPath === path ? currentPage.getPageTitle() : ''
+      pageQuery: currentContext.path === path ? currentContext.query : '',
+      pageTitle: currentContext.path === path ? currentContext.title : ''
     };
   };
 

@@ -13,24 +13,27 @@ import EMIT_MSG from '@@/constants/emitMsg';
 export class GioMultipleInstances {
   public pluginVersion: string;
   public subTrackingIds: string[];
+  private dataStoreRewritten = false;
   constructor(public growingIO: GrowingIOType) {
     this.pluginVersion = '__PLUGIN_VERSION__';
     this.subTrackingIds = [];
     this.growingIO.emitter.on(EMIT_MSG.ON_SDK_INITIALIZE_BEFORE, () => {
       // 自动重写部分代码以实现多实例功能
-      if (!this.growingIO.trackingId) {
+      if (!this.growingIO.trackingId && !this.dataStoreRewritten) {
         this.rewriteDataStore();
+        this.dataStoreRewritten = true;
       }
       // 挂载子实例集合对象
       if (!this.growingIO.subInstance) {
         this.growingIO.subInstance = {};
       }
     });
-    this.growingIO.emitter.on(EMIT_MSG.OPTION_INITIALIZED, ({ trackingId }) => {
+    this.growingIO.emitter.on(EMIT_MSG.SDK_INITIALIZED, ({ trackingId }) => {
       // 是子实例
       if (
         this.growingIO.trackingId &&
-        this.growingIO.trackingId !== trackingId
+        this.growingIO.trackingId !== trackingId &&
+        !this.subTrackingIds.includes(trackingId)
       ) {
         // 把所有已初始化过的子实例trackingId保存下来方便预定义事件和无埋点事件广播时调用
         this.subTrackingIds.push(trackingId);
@@ -115,6 +118,7 @@ export class GioMultipleInstances {
       const { platformConfig, inPlugin, minipInstance, plugins, dataStore } =
         this.growingIO;
       const { uniVue, taro, mpvue, mpx } = options;
+      dataStore.validateTrackerFramework(options);
       // 注意：mpx的page重写依赖原生逻辑，需要设置canHook和执行initEventHooks
       // uniapp、taro、mpvue完全自己接管生命周期，不需要原生hook
       if (trackerType || mpx) {
@@ -131,20 +135,22 @@ export class GioMultipleInstances {
       /** 第三方框架重写 - 每个实例都需要执行各自的框架适配 */
       // uniapp
       if (uniVue) {
-        plugins?.gioUniAppAdapter?.main();
+        plugins.gioUniAppAdapter.main();
       }
       // taro
       if (taro) {
-        plugins?.gioTaroAdapter?.main();
+        plugins.gioTaroAdapter.main();
       }
       // mpvue
       if (mpvue) {
-        plugins?.gioMpvueAdapter?.main();
+        plugins.gioMpvueAdapter.main();
       }
       // mpx
       if (mpx) {
-        plugins?.gioMpxAdapter?.main();
+        plugins.gioMpxAdapter.main();
       }
+      // 与基础 DataStore 保持相同契约：初始化调用方需要能区分 hook 成功和失败。
+      return true;
     };
 
     // 多实例时处理复制发送
@@ -174,7 +180,14 @@ export class GioMultipleInstances {
             ...event,
             ...eventContextBuilder(
               trackingId,
-              undefined,
+              // 复制发送只补目标实例身份和属性，页面归属与时间属于原始事件。
+              // 冷启动队列释放时页面可能已切换，不能在此重新采样当前页面。
+              {
+                path: event.path,
+                query: event.query,
+                title: event.title,
+                timestamp: event.timestamp
+              },
               event.trackingId !== trackingId
             )
           };
@@ -191,12 +204,6 @@ export class GioMultipleInstances {
     };
   };
 
-  onSendBefore = ({ eventsQueue, requestData, trackingId }: any) => {
-    // 不是主实例的事件由多实例插件来提交请求
-    if (trackingId !== this.growingIO.trackingId) {
-      this.growingIO.uploader.sendEvent(eventsQueue, requestData);
-    }
-  };
 }
 
 export default { name: 'gioMultipleInstances', method: GioMultipleInstances };

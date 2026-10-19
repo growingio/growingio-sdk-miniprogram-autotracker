@@ -20,6 +20,7 @@ import {
   niceTry
 } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
+import { getPageIdentityPath, isPageTarget } from '@@/utils/pageContext';
 
 let ut;
 class GioImpressionTracking {
@@ -47,23 +48,44 @@ class GioImpressionTracking {
     emitter.on(EMIT_MSG.MINIP_LIFECYCLE, ({ event, params }) => {
       const { minipInstance } = this.growingIO;
       if (event === 'Page onShowEnd') {
-        const page = minipInstance.getCurrentPage();
-        this.traverseListen(page);
+        const page =
+          params?.page || params?.instance || minipInstance.getCurrentPage();
+        this.traverseListen(page, page);
       }
       if (['Page onHide', 'Page onUnload'].includes(event)) {
         // 页面隐藏时销毁曝光监听
-        const route = params.page.route;
+        const route = this.getPagePath(params?.page || params?.instance);
         const observers = Object.values(this.observerIds[route] ?? {});
         observers.forEach((o: any) => o.disconnect());
       }
     });
   }
 
+  /** 页面身份用于区分查询作用域；不能用会回退页面栈的 getPagePath 判断组件。 */
+  private isPageTarget = isPageTarget;
+
+  /** 只有已确认的页面才参与解析，避免普通组件/缺失页面借用当前栈顶路由。 */
+  private getPagePath = (page: any): string => {
+    if (!this.isPageTarget(page)) return '';
+    return getPageIdentityPath(page);
+  };
+
+  /** 普通组件归属正在采集的生命周期页面；查询回调随后使用这个页面快照。 */
+  private getOwnerPage = (target: any, page?: any) => {
+    if (this.isPageTarget(target)) return target;
+    return (
+      page ||
+      (this.isPageTarget(target?.$page) ? target.$page : undefined) ||
+      this.growingIO.dataStore?.eventHooks?.currentPage.getContextPage() ||
+      this.growingIO.minipInstance.getCurrentPage()
+    );
+  };
+
   /**
    * 遍历页面中的自定义组件进行监听
    * @param {any} target - 目标对象
    */
-  traverseListen = (target: any) => {
+  traverseListen = (target: any, page = this.getOwnerPage(target)) => {
     const { minipInstance } = this.growingIO;
     if (ut.isFunction(target?.selectAllComponents)) {
       const selects = target?.selectAllComponents(
@@ -71,11 +93,17 @@ class GioImpressionTracking {
       );
       if (!ut.isEmpty(selects)) {
         selects.forEach((s) => {
-          this.traverseListen(s);
+          this.traverseListen(s, page);
         });
       }
     }
-    minipInstance.initImpression(target);
+    const currentPage = this.growingIO.dataStore?.eventHooks?.currentPage;
+    const initialize = () => minipInstance.initImpression(target);
+    if (page && currentPage?.withPageContext) {
+      currentPage.withPageContext(page, initialize);
+    } else {
+      initialize();
+    }
   };
 
   /**
@@ -101,6 +129,7 @@ class GioImpressionTracking {
    */
   getNodeId = (collectTarget: any) => {
     const { gioPlatform } = this.growingIO;
+    const pagePath = this.getPagePath(collectTarget);
     switch (gioPlatform) {
       case 'wx':
       case 'qq':
@@ -113,15 +142,15 @@ class GioImpressionTracking {
           ? `${collectTarget.$page.$id}-${collectTarget.$id}` //my component
           : collectTarget.$id; // my page
       case 'swan':
-        return collectTarget.route
-          ? toString(hashCode(collectTarget.route)) // swan page
+        return pagePath
+          ? toString(hashCode(pagePath)) // swan page
           : collectTarget.nodeId; // swan component
       case 'tt':
-        return collectTarget.route
-          ? toString(hashCode(collectTarget.route)) // swan page
+        return pagePath
+          ? toString(hashCode(pagePath)) // tt page
           : collectTarget.__nodeId__; // swan component
       case 'xhs':
-        return collectTarget.route
+        return pagePath
           ? collectTarget.pageId // xhs page
           : collectTarget.componentId; // xhs component
       default:
@@ -136,7 +165,7 @@ class GioImpressionTracking {
    * @param {string} optionKey - 选项 key
    * @returns {boolean} - 是否继续
    */
-  rectObserve = (rect, collectTarget, optionKey) => {
+  rectObserve = (rect, collectTarget, optionKey, ownerPage?: any) => {
     const { gioPlatform } = this.growingIO;
     if (
       (gioPlatform === 'tt' && collectTarget.__nodeId__) ||
@@ -147,17 +176,13 @@ class GioImpressionTracking {
       return false;
     }
     const nodeId = this.getNodeId(collectTarget);
-    const page = collectTarget.route
-      ? collectTarget
-      : this.growingIO.minipInstance.getCurrentPage();
+    const page = this.getOwnerPage(collectTarget, ownerPage);
+    const pagePath = this.getPagePath(page);
     // 监听的目标页面和上一次的不一致，或者监听的组件或页面的监听已经被注销时，可以继续生成新的监听
     let observerNeedNew = false;
-    if (page.route) {
-      const isEqualRects = this.isEqualRects(rect, page.route, nodeId);
-      const disconnect = ut.get(
-        this.observerIds,
-        `${page.route}.${nodeId}._disconnected`
-      );
+    if (pagePath) {
+      const isEqualRects = this.isEqualRects(rect, pagePath, nodeId);
+      const disconnect = this.observerIds[pagePath]?.[nodeId]?._disconnected;
       observerNeedNew = !isEqualRects || disconnect !== false;
     }
     if (
@@ -166,11 +191,11 @@ class GioImpressionTracking {
       !ut.isNil(rect[0]) &&
       observerNeedNew
     ) {
-      if (ut.isEmpty(this.rects[page.route])) {
-        this.rects[page.route] = {};
+      if (ut.isEmpty(this.rects[pagePath])) {
+        this.rects[pagePath] = {};
       }
-      this.rects[page.route][nodeId] = rect;
-      this.createObserver(collectTarget, optionKey);
+      this.rects[pagePath][nodeId] = rect;
+      this.createObserver(collectTarget, optionKey, page);
     }
   };
 
@@ -182,10 +207,13 @@ class GioImpressionTracking {
    */
   main = (collectTarget: any, optionKey: 'observeAll' | 'selectAll') => {
     const { gioPlatform } = this.growingIO;
+    const ownerPage = this.getOwnerPage(collectTarget);
     // 页面中存在曝光标记的节点才监听
-    // 有route字段的是页面，没有的是组件内部
-    const query = collectTarget.route
-      ? this.growingIO.minipInstance.minip?.createSelectorQuery()
+    // 页面支持各平台路由别名；普通组件仍保留 .in 的查询作用域。
+    const query = this.isPageTarget(collectTarget)
+      ? ut.isFunction(collectTarget.createSelectorQuery)
+        ? collectTarget.createSelectorQuery()
+        : this.growingIO.minipInstance.minip?.createSelectorQuery()
       : this.growingIO.minipInstance.minip
           ?.createSelectorQuery()
           .in(collectTarget);
@@ -195,7 +223,7 @@ class GioImpressionTracking {
         .boundingClientRect(([rect = []]) => {
           rect = ut.isArray(rect) ? rect : [rect];
           if (!isEmpty(rect)) {
-            this.rectObserve(rect, collectTarget, optionKey);
+            this.rectObserve(rect, collectTarget, optionKey, ownerPage);
           }
         });
       query.exec();
@@ -203,7 +231,7 @@ class GioImpressionTracking {
       query.selectAll('.growing_collect_imp').boundingClientRect();
       query.exec(([rect]) => {
         if (!isEmpty(rect)) {
-          this.rectObserve(rect, collectTarget, optionKey);
+          this.rectObserve(rect, collectTarget, optionKey, ownerPage);
         }
       });
     }
@@ -216,7 +244,8 @@ class GioImpressionTracking {
    */
   createObserver = (
     collectTarget: any,
-    optionKey: 'observeAll' | 'selectAll'
+    optionKey: 'observeAll' | 'selectAll',
+    ownerPage?: any
   ) => {
     const { gioPlatform, minipInstance, vdsConfig } = this.growingIO;
     // 初始化监听对象
@@ -230,21 +259,14 @@ class GioImpressionTracking {
       observerOption.dataset = true;
     }
     const nodeId = this.getNodeId(collectTarget);
-    let page = collectTarget;
-    // uniapp是组件和页面一体，所以要分两次尝试监听；原生是组件和页面互相独立，按类型监听
-    // 自定义组件是不能直接在页面上被拿到，所以直接监听页面不会监听到自定义组件
-    if (
-      collectTarget.isComponent ||
-      !collectTarget.route ||
-      collectTarget.mpType === 'component'
-    ) {
-      page = minipInstance.getCurrentPage();
-    }
-    if (!this.observerIds[page.route]) {
-      this.observerIds[page.route] = {};
+    const page = this.getOwnerPage(collectTarget, ownerPage);
+    const pagePath = this.getPagePath(page);
+    if (!pagePath) return;
+    if (!this.observerIds[pagePath]) {
+      this.observerIds[pagePath] = {};
     }
     // 存在组件id一致的监听时要先移除监听，防止重复监听重复触发
-    const originObserver = this.observerIds[page.route][nodeId];
+    const originObserver = this.observerIds[pagePath][nodeId];
     if (originObserver && !originObserver._disconnected) {
       originObserver.disconnect();
     }
@@ -278,7 +300,7 @@ class GioImpressionTracking {
     }
     observer = observer.relativeToViewport();
     // 不管原先是否创建过，直接覆盖（observerId会更新）
-    this.observerIds[page.route][nodeId] = observer;
+    this.observerIds[pagePath][nodeId] = observer;
     // 添加监听回调
     this.targetObserve(observer, page);
   };
@@ -297,7 +319,10 @@ class GioImpressionTracking {
       if (!ut.isEmpty(result) && result.intersectionRatio >= threshold) {
         let dataset: any = result.dataset;
         if (taro && ut.isTaro3(taro)) {
-          dataset = this.getTaro3Dataset(collectPage.route, result.id);
+          dataset = this.getTaro3Dataset(
+            this.getPagePath(collectPage),
+            result.id
+          );
         }
         if (!ut.isObject(dataset)) {
           ut.consoleText('曝光节点缺少有效的 dataset，已跳过本次采集!', 'warn');
@@ -333,7 +358,7 @@ class GioImpressionTracking {
               }
             }
           }
-          this.buildImpEvent(dataProperties, sendTargets);
+          this.buildImpEvent(dataProperties, sendTargets, collectPage);
         } else {
           ut.consoleText(
             '曝光事件格式不正确，事件名只能包含数字、字母和下划线，且不以数字开头!',
@@ -399,7 +424,7 @@ class GioImpressionTracking {
    * @returns {any} - dataset
    */
   getTaro3Dataset = (route: string, targetId: string) => {
-    const page = this.growingIO?.taro3VMs[route];
+    const page = this.growingIO?.taro3VMs?.[route];
     if (!page) {
       return false;
     }
@@ -429,17 +454,24 @@ class GioImpressionTracking {
    * @param {any} dataProperties - 曝光数据
    * @param {string[]} sendTargets - 发送目标
    */
-  buildImpEvent = (dataProperties: any, sendTargets: string[]) => {
+  buildImpEvent = (dataProperties: any, sendTargets: string[], page?: any) => {
     const { eventName, properties } = dataProperties;
     const {
       trackingId,
       dataStore: { eventContextBuilder, eventConverter },
       plugins
     } = this.growingIO;
+    const currentPage = this.growingIO.dataStore.eventHooks?.currentPage;
+    // 曝光回调可能晚于切页；在所属页面内构建，保留普通 CUSTOM 的标题和属性规则。
+    const buildContext = () => eventContextBuilder(trackingId);
+    const context =
+      page && currentPage?.withPageContext
+        ? currentPage.withPageContext(page, buildContext)
+        : buildContext();
     const event = {
       eventType: 'CUSTOM',
       eventName,
-      ...eventContextBuilder(trackingId)
+      ...context
     };
     event.attributes = limitObject({
       ...(event.attributes ?? {}),

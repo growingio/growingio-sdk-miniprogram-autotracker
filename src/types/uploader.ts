@@ -34,6 +34,13 @@ export interface UploaderType {
    * @param {EXTEND_EVENT} commitData 提交的数据
    */
   commitRequest: (commitData: EXTEND_EVENT) => void;
+  /** 安全广播上传生命周期；单个监听器异常不阻断传输或请求收尾。 */
+  emitUploadEvent: (message: string, args: any) => void;
+  /** 实际取出批次时消费入口来源并冻结页面快照。 */
+  prepareBatch: (
+    trackingId: string,
+    eventsQueue: EXTEND_EVENT[]
+  ) => void;
   /**
    * 初始化请求
    * @param {string} trackingId 跟踪器 ID
@@ -46,6 +53,17 @@ export interface UploaderType {
    * @param {EVENT[]} requestData 请求数据
    */
   sendEvent: (eventsQueue: EXTEND_EVENT[], requestData: EVENT[]) => void;
+  /**
+   * 使用非标准平台传输（例如淘宝云函数）发送事件。
+   * 调用方只提供传输动作和成功判定，槽位、超时、重试与收尾仍由上传器统一管理。
+   */
+  sendExternalEvent: (
+    eventsQueue: EXTEND_EVENT[],
+    requestData: EVENT[] | EVENT,
+    invoke: () => Promise<any> | any,
+    isSuccessful: (result: any) => boolean,
+    failureStage: string
+  ) => void;
   /**
    * 请求错误回调
    * @param {EXTEND_EVENT} event 事件

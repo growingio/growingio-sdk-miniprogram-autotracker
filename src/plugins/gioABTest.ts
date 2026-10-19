@@ -1,7 +1,4 @@
-/**
- * 名称：ABTest插件
- * 用途：用于提供自动获取AB实验数据和上报实验命中的插件。
- */
+/** AB 分流插件：配置、逻辑请求合并和实验命中；身份与缓存由各自所有者管理。 */
 import { GrowingIOType } from '@@/types/growingIO';
 import {
   isEmpty,
@@ -18,88 +15,91 @@ import {
   consoleText,
   hashCode,
   limitObject,
-  niceCallback,
-  niceTry
+  niceCallback
 } from '@@/utils/tools';
 import EMIT_MSG from '@@/constants/emitMsg';
-import { ABTEST_DATA_REG, ABTEST_SIGN_REG } from '@@/constants/regex';
+import { createRequestAttempt } from '@@/utils/requestAttempt';
+import {
+  ABRequestSnapshot,
+  appendStm,
+  buildABRequestBody,
+  getABCacheKeys,
+  sha1
+} from './gioABTest/request';
+import { ABCacheStore } from './gioABTest/cacheStore';
+import {
+  ABIdentityChange,
+  createABIdentityProvider
+} from './gioABTest/identity';
+
+/** 一个逻辑分流拥有稳定输入、调用方和重试预算；每次原生尝试独立管理。 */
+interface ABRequestJob {
+  readonly snapshot: ABRequestSnapshot;
+  readonly originData: any;
+  readonly originDataExpiresAt: number;
+  callbacks: any[];
+  retryCount: number;
+  lastStm?: number;
+  cancelled: boolean;
+  settled: boolean;
+  settle: (result: any) => void;
+  attempt?: ReturnType<typeof createRequestAttempt>;
+}
 
 class GioABTest {
-  public pluginVersion: string;
-  // 请求间隔时长
+  public pluginVersion = '__PLUGIN_VERSION__';
+  /** 同一身份缓存槽两次分流请求的最小间隔，分钟。 */
   public requestInterval: number;
-  // 请求超时时长
+  /** 单次原生尝试的超时时间，毫秒。 */
   public requestTimeout: number;
-  // 分流服务请求地址
-  public url: any;
-  // 标记当前是否为新访问设备
-  public newDevice: boolean;
-  // 各个实例新设备进入时的sessionId；小程序没有刷新页面保持session的问题，所以存在内存里就可以
-  public visitSids: any;
+  public url: Record<string, string> = {};
+  /** 先按实例寻址，再按身份缓存槽合并；身份变更只访问所属实例。 */
+  private pendingRequests: Record<string, Record<string, ABRequestJob>> = {};
+  private cacheStore: ABCacheStore;
+  private identityProvider: ReturnType<typeof createABIdentityProvider>;
+
   constructor(public growingIO: GrowingIOType, options: any) {
-    this.pluginVersion = '__PLUGIN_VERSION__';
-    // ABTest 支持两种地址配置：
-    // 1. 单实例场景可直接传字符串；
-    // 2. 多实例场景必须传对象，并按 trackingId 映射对应服务地址。
     const {
       abServerUrl = 'https://ab.growingio.com',
       requestInterval,
       requestTimeout
     } = options ?? {};
     this.timeoutCheck(requestInterval, requestTimeout);
-    const { emitter, userStore } = this.growingIO;
+    this.cacheStore = new ABCacheStore(
+      () => growingIO.minipInstance,
+      () => this.requestInterval
+    );
+    this.identityProvider = createABIdentityProvider(growingIO, abServerUrl);
     this.growingIO.getABTest = this.getABTest;
-    // 标记“本次冷启动拿到了新的 deviceId”。
-    // 这个状态不是给每次请求复用的普通开关，而是为了覆盖一个很具体的时序：
-    // 主实例已经在首访阶段生成了 session，但某个 trackingId 对应的 ABTest 实例是稍后才初始化的。
-    // 这时它还没来得及把“首访 session”写进 visitSids，就需要依赖 newDevice 在 generateUrl 时补一次。
-    this.newDevice = false;
-    // 这里只缓存“首访当下”的 session 快照，而不是当前实时 session。
-    // 后面请求里用 visitSids[trackingId] === getSessionId(trackingId) 来判断：
-    // 如果当前 session 还等于首访 session，服务端就应该把这次请求视为 newDevice。
-    this.visitSids = {};
-    emitter.on(EMIT_MSG.OPTION_INITIALIZED, () => {
-      if (!isEmpty(abServerUrl)) {
-        this.abtStorageCheck();
-        this.url = {};
-        if (isString(abServerUrl)) {
-          this.generateUrl(this.growingIO.trackingId, abServerUrl);
-        } else if (isObject(abServerUrl)) {
-          keys(abServerUrl).forEach((trackingId: string) => {
-            this.generateUrl(trackingId, abServerUrl[trackingId]);
-          });
-        }
-      } else {
+    const { emitter } = growingIO;
+    emitter.on(EMIT_MSG.OPTION_INITIALIZED, (vdsConfig: any = {}) => {
+      if (isEmpty(abServerUrl)) {
         consoleText(
           '如果您需要使用ABTest功能，请配置服务地址 abServerUrl!',
           'warn'
         );
+        return;
       }
+      if (vdsConfig.dataCollect !== false) this.cacheStore.prune();
+      this.url = {};
+      if (isString(abServerUrl))
+        this.generateUrl(growingIO.trackingId, abServerUrl);
+      else if (isObject(abServerUrl))
+        keys(abServerUrl).forEach((trackingId: string) =>
+          this.generateUrl(trackingId, abServerUrl[trackingId])
+        );
     });
-    emitter.on(EMIT_MSG.UID_UPDATE, ({ newUId, oldUId }) => {
-      // 没有旧 deviceId 说明这是当前冷启动里第一次拿到稳定身份。
-      // 这里顺手记录每个 trackingId 当下的 session，供后续 newDevice 判定使用。
-      if (!oldUId && newUId) {
-        this.newDevice = true;
-        if (isString(abServerUrl)) {
-          const trackingId = this.growingIO.trackingId;
-          const sId = userStore.getSessionId(trackingId);
-          this.visitSids[trackingId] = sId;
-        } else if (isObject(abServerUrl)) {
-          keys(abServerUrl).forEach((trackingId: string) => {
-            const sId = userStore.getSessionId(trackingId);
-            this.visitSids[trackingId] = sId;
-          });
+    emitter.on(
+      EMIT_MSG.OPTION_CHANGE,
+      ({ trackingId, optionName, optionValue }: any = {}) => {
+        if (optionName === 'dataCollect' && optionValue === false) {
+          this.cancelPendingRequests(trackingId || growingIO.trackingId);
         }
       }
-    });
+    );
+    this.identityProvider.subscribe(this.onIdentityChanged);
   }
 
-  /**
-   * 两个时长的初始化处理
-   * @param {number | string} requestInterval - 请求间隔
-   * @param {number | string} requestTimeout - 请求超时时间
-   */
   timeoutCheck = (
     requestInterval: number | string,
     requestTimeout: number | string
@@ -122,224 +122,306 @@ class GioABTest {
     }
   };
 
-  /**
-   * 检查存储中的实验数据是否已过期
-   */
-  abtStorageCheck = () => {
-    const { minipInstance }: any = this.growingIO;
-    const storageInfo =
-      niceTry(() => minipInstance.minip?.getStorageInfoSync?.()) || {};
-    const storageKeys = Array.isArray(storageInfo.keys) ? storageInfo.keys : [];
-    // 请求标记
-    const abtsKeys = storageKeys.filter((k) => ABTEST_SIGN_REG.test(k));
-    abtsKeys.forEach((k) => {
-      // 移除过期的数据，防止存储超限
-      const sign = minipInstance.getStorageSync(k);
-      if (!sign || sign < Date.now()) {
-        minipInstance.removeStorageSync(k);
-      }
+  /** 深复制 JSON 响应，并保留缺省字段；业务回调不能修改其他调用方或缓存的对象。 */
+  private cloneExperimentResult = (value: any): any => {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.cloneExperimentResult(item));
+    }
+    if (!isObject(value)) return value;
+    const result = {};
+    keys(value).forEach((key: string) => {
+      // defineProperty 保留 JSON 中名为 __proto__ 的普通属性，不触发原型 setter。
+      Object.defineProperty(result, key, {
+        value: this.cloneExperimentResult(value[key]),
+        enumerable: true,
+        writable: true,
+        configurable: true
+      });
     });
-    // abtest数据
-    const abtdKeys = storageKeys.filter((k) => ABTEST_DATA_REG.test(k));
-    abtdKeys.forEach((k) => {
-      // 移除过期的数据，防止存储超限
-      if (isEmpty(minipInstance.getStorageSync(k))) {
-        minipInstance.removeStorageSync(k);
-      }
-    });
+    return result;
   };
 
-  /**
-   * 生成存储的 hash key
-   * @param {string} trackingId - 实例 ID
-   * @param {string | number} layerId - 实验层 ID
-   * @returns {number} - hash 值
-   */
-  getHashKey = (trackingId: string, layerId: string | number) => {
-    const {
-      userStore: { getUid },
-      vdsConfig: { projectId }
-    } = this.growingIO;
-    return hashCode(`${trackingId}#${projectId}#${getUid()}#${layerId}`, true);
-  };
-
-  /**
-   * 生成数据接口地址
-   * @param {string} trackingId - 实例 ID
-   * @param {string} abServerUrl - ABTest 服务地址
-   * @description
-   * 这里除了拼接 URL，还会在“新设备首访 + 延迟初始化实例”的时序下补写 visitSids，
-   * 保证后续 newDevice 判定仍然能基于首访 session 快照工作。
-   */
   generateUrl = (trackingId: string, abServerUrl: string) => {
-    // 如果这个 trackingId 对应的实例是“首访之后才初始化”的，就不会走到上面的 UID_UPDATE 记录逻辑。
-    // 这里在首次生成 URL 时补写 visitSids，保证延迟初始化实例也能拿到首访 session 快照。
-    if (this.newDevice && !this.visitSids[trackingId]) {
-      // 这里要用userStore中的getSessionId，调用这个方法的时候实例肯定已经初始化了
-      // 如果是新初始化可以通过getSessionId准确获取sessionExpires来生成准确的session值;
-      // 如果是旧实例则直接用存储中的sessionId
-      this.visitSids[trackingId] =
-        this.growingIO.userStore.getSessionId(trackingId);
+    // 只有旧核心的兼容 provider 需要补建延迟实例首访；当前核心由 UserStore 持有。
+    this.identityProvider.ensureTracker(trackingId);
+    const root = startsWith(abServerUrl, 'http')
+      ? abServerUrl
+      : `https://${abServerUrl}`;
+    this.url[trackingId] = `${root}/diversion/specified-layer-variables`;
+  };
+
+  isDataCollectEnabled = (trackingId: string) =>
+    !!this.growingIO.dataStore.getTrackerVds(trackingId)?.dataCollect;
+
+  private isRequestJobActive = (job: ABRequestJob) => {
+    if (job.cancelled) return false;
+    const { snapshot } = job;
+    const { userStore, dataStore } = this.growingIO;
+    const tracker = dataStore.getTrackerVds(snapshot.trackingId);
+    const userId = toString(userStore.getUserId(snapshot.trackingId) || '');
+    const userKey = tracker?.idMapping
+      ? toString(userStore.getUserKey(snapshot.trackingId) || '')
+      : '';
+    if (
+      !tracker?.dataCollect ||
+      toString(userStore.getUid()) !== snapshot.deviceId ||
+      userId !== snapshot.identity.userId ||
+      userKey !== snapshot.identity.userKey
+    ) {
+      job.cancelled = true;
+      return false;
     }
-    if (!startsWith(abServerUrl, 'http')) {
-      this.url[
-        trackingId
-      ] = `https://${abServerUrl}/diversion/specified-layer-variables`;
-    } else {
-      this.url[
-        trackingId
-      ] = `${abServerUrl}/diversion/specified-layer-variables`;
+    return true;
+  };
+
+  private detachRequest = (job: ABRequestJob) => {
+    const { trackingId, signKey } = job.snapshot;
+    const bucket = this.pendingRequests[trackingId];
+    if (bucket?.[signKey] === job) {
+      delete bucket[signKey];
+      if (!keys(bucket).length) delete this.pendingRequests[trackingId];
     }
   };
 
-  /**
-   * 获取实验调用
-   * @param {string} trackingId - 实例 ID
-   * @param {string | number} layerId - 实验层 ID
-   * @param {any} callback - 回调函数
-   * @description
-   * 先读取本地缓存和请求节流标记；只有缓存为空或标记过期时，才真正向 AB 服务发请求。
-   */
+  private settleRequest = (
+    job: ABRequestJob,
+    result: any,
+    legacyDeferred = false
+  ) => {
+    if (job.settled) return;
+    job.settled = true;
+    this.detachRequest(job);
+    job.attempt?.cancel();
+    const notify = () =>
+      job.callbacks
+        .slice()
+        .forEach((callback) =>
+          niceCallback(
+            callback,
+            this.isRequestJobActive(job)
+              ? this.cloneExperimentResult(result)
+              : {}
+          )
+        );
+    // 旧核心仍逐字段通知；该兼容路径不会在支持完整事务的核心中运行。
+    if (legacyDeferred) Promise.resolve().then(notify);
+    else notify();
+  };
+
+  private cancelRequests = (jobs: ABRequestJob[], legacyDeferred = false) => {
+    // 在客户回调前令整批旧 job 失效并脱离表，重入不能加入或取消新 job。
+    jobs.forEach((job) => {
+      job.cancelled = true;
+      this.detachRequest(job);
+    });
+    jobs.forEach((job) => this.settleRequest(job, {}, legacyDeferred));
+  };
+
+  private cancelPendingRequests = (trackingId: string) => {
+    const bucket = this.pendingRequests[trackingId] || {};
+    this.cancelRequests(keys(bucket).map((key: string) => bucket[key]));
+  };
+
+  private onIdentityChanged = (change: ABIdentityChange) => {
+    const trackingIds = change.trackingId
+      ? [change.trackingId]
+      : keys(this.pendingRequests);
+    trackingIds.forEach((trackingId: string) => {
+      const bucket = this.pendingRequests[trackingId];
+      if (!bucket) return;
+      if (
+        change.identity &&
+        this.growingIO.userStore.getIdentitySnapshot(trackingId).revision !==
+          change.identity.revision
+      ) {
+        return; // 更早的观察者重入身份 API 后，旧提交快照不能取消新身份的请求。
+      }
+      const jobs = keys(bucket)
+        .map((key: string) => bucket[key])
+        .filter((job) => {
+          if (!change.identity) return !this.isRequestJobActive(job);
+          const { snapshot } = job;
+          const userKey = this.growingIO.dataStore.getTrackerVds(trackingId)
+            ?.idMapping
+            ? change.identity.userKey
+            : '';
+          return (
+            snapshot.deviceId !== change.identity.deviceId ||
+            snapshot.identity.userId !== change.identity.userId ||
+            snapshot.identity.userKey !== userKey
+          );
+        });
+      this.cancelRequests(jobs, change.legacy);
+    });
+  };
+
   getABTest = (trackingId: string, layerId: string | number, callback: any) => {
-    if (isEmpty(this.url[trackingId])) {
-      this.generateUrl(trackingId, 'https://ab.growingio.com');
+    if (!this.isDataCollectEnabled(trackingId)) {
+      niceCallback(callback, {});
+      return;
     }
+    if (isEmpty(this.url[trackingId]))
+      this.generateUrl(trackingId, 'https://ab.growingio.com');
     if (!layerId) {
       consoleText('获取ABTest数据失败! 实验层Id不合法!', 'error');
       niceCallback(callback, {});
       return;
     }
-    const { minipInstance } = this.growingIO;
-    // 接口调用的超时时间
-    const abtSign =
-      minipInstance.getStorageSync(
-        `${this.getHashKey(trackingId, layerId)}_gdp_abt_sign`
-      ) || 0;
-    // 没有超时尝试取数据
-    const expData =
-      minipInstance.getStorageSync(
-        `${this.getHashKey(trackingId, layerId)}_gdp_abtd`
-      ) || {};
-    // 没有有效数据或者接口请求标记超时则从调用分流服务获取数据
-    if (!abtSign || abtSign < Date.now()) {
-      this.initiateRequest(trackingId, layerId, expData, callback);
-    } else {
-      niceCallback(callback, expData);
-    }
+    const snapshot = this.createRequestSnapshot(trackingId, layerId);
+    const cached = this.cacheStore.read(snapshot);
+    if (cached.hit)
+      niceCallback(callback, this.cloneExperimentResult(cached.result));
+    else
+      this.requestOrJoin(
+        snapshot,
+        callback,
+        cached.originData,
+        cached.originDataExpiresAt
+      );
   };
 
-  /**
-   * 发起请求
-   * @param {string} trackingId - 实例 ID
-   * @param {string | number} layerId - 实验层 ID
-   * @param {any} originData - 原始数据
-   * @param {any} callback - 回调函数
-   * @param {number} [retryCount=0] - 当前这一次请求链路已经消耗的重试次数
-   * @description
-   * retryCount 按单次请求链路递归传递，避免把重试次数挂在实例上导致后续无关请求也失去重试能力。
-   */
-  initiateRequest = (
+  /** 冻结请求输入；mutable job 和 attempt 不放入协议上下文。 */
+  createRequestSnapshot = (
     trackingId: string,
-    layerId: string | number,
-    originData: any,
+    layerId: string | number
+  ): ABRequestSnapshot => {
+    const { userStore, dataStore } = this.growingIO;
+    const tracker = dataStore.getTrackerVds(trackingId) || {};
+    const projectId = toString(tracker.projectId);
+    const userId = toString(userStore.getUserId(trackingId) || '');
+    const userKey = tracker.idMapping
+      ? toString(userStore.getUserKey(trackingId) || '')
+      : '';
+    const identityHash = sha1(JSON.stringify([userId, userKey]));
+    const deviceId = toString(userStore.getUid());
+    return Object.freeze({
+      trackingId,
+      layerId,
+      projectId,
+      dataSourceId: toString(tracker.dataSourceId),
+      deviceId,
+      newDevice: this.identityProvider.getNewDevice(trackingId),
+      url: this.url[trackingId],
+      identity: Object.freeze({ userId, userKey }),
+      ...getABCacheKeys(trackingId, projectId, deviceId, layerId, identityHash)
+    });
+  };
+
+  private getNextStm = (job: ABRequestJob) => {
+    const now = Date.now();
+    const stm = job.lastStm && now <= job.lastStm ? job.lastStm + 1 : now;
+    job.lastStm = stm;
+    return String(stm);
+  };
+
+  private requestOrJoin = (
+    snapshot: ABRequestSnapshot,
     callback: any,
-    retryCount = 0
+    originData: any,
+    originDataExpiresAt: number
   ) => {
-    // retryCount 改成单次请求链路内传递，而不是挂在实例字段上。
-    // 这样一次 layerId 请求失败只会消耗自己这条链路的重试次数，
-    // 不会把整个 GioABTest 实例后面所有 getABTest 调用的重试额度一起耗尽。
-    const {
-      userStore: { getUid, getSessionId },
-      dataStore,
-      minipInstance
-    } = this.growingIO;
-    const { projectId, dataSourceId } = dataStore.getTrackerVds(trackingId);
-    // 各小程序失败回调的参数结构并不一致，先统一提取错误文本；
-    // 重试次数仍由当前请求链路携带，保证异常响应不会污染后续请求。
-    const handleRequestFailure = (result: any = {}) => {
+    const bucket =
+      this.pendingRequests[snapshot.trackingId] ||
+      (this.pendingRequests[snapshot.trackingId] = {});
+    const pending = bucket[snapshot.signKey];
+    if (pending) {
+      pending.callbacks.push(callback);
+      return;
+    }
+    const job: ABRequestJob = {
+      snapshot,
+      originData: this.cloneExperimentResult(originData),
+      originDataExpiresAt,
+      callbacks: [callback],
+      retryCount: 0,
+      cancelled: false,
+      settled: false,
+      settle: (result) => this.settleRequest(job, result)
+    };
+    bucket[snapshot.signKey] = job;
+    this.initiateRequest(job);
+  };
+
+  private initiateRequest = (job: ABRequestJob) => {
+    if (!this.isRequestJobActive(job)) {
+      job.settle({});
+      return;
+    }
+    const { snapshot } = job;
+    const attempt = createRequestAttempt(this.requestTimeout, () => {
+      job.cancelled = true;
+      consoleText('获取ABTest数据失败! 请求超时!', 'error');
+      job.settle({});
+    });
+    job.attempt = attempt;
+    const fail = (result: any = {}) => {
+      if (!attempt.finish()) return;
+      if (!this.isRequestJobActive(job)) {
+        job.settle({});
+        return;
+      }
       const errMsg = toString(result?.errMsg || result);
-      // 请求超时（这里没用微信提供的errno，因为它没有值，其他小程序也不一定能兼容）
       if (errMsg.indexOf('timeout') > -1) {
         consoleText('获取ABTest数据失败! 请求超时!', 'error');
-        niceCallback(callback, {});
-      } else if (retryCount < 2) {
-        this.initiateRequest(
-          trackingId,
-          layerId,
-          originData,
-          callback,
-          retryCount + 1
-        );
+        job.settle({});
+      } else if (job.retryCount < 2) {
+        job.retryCount += 1;
+        this.initiateRequest(job);
       } else {
         consoleText(
           `获取ABTest数据失败! ${JSON.stringify(errMsg).slice(0, 30)}!`,
           'error'
         );
-        niceCallback(callback, {});
+        job.settle({});
       }
     };
-
     try {
-      minipInstance.request({
-        url: this.url[trackingId],
-        header: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        method: 'POST',
-        data: {
-          accountId: projectId,
-          datasourceId: dataSourceId,
-          distinctId: getUid(),
-          layerId,
-          // 只有“当前 session 仍然等于首访 session 快照”时，才认为这次 AB 请求来自新设备首访。
-          newDevice: this.visitSids[trackingId] === getSessionId(trackingId)
-        },
-        timeout: this.requestTimeout,
-        success: (result: any = {}) => {
-          const data = result?.data;
-          // HTTP success 不代表业务响应完整。格式异常时立即回调空结果，且不写入节流标记，
-          // 允许客户下一次调用重新请求。
-          if (!isObject(data)) {
-            consoleText('获取ABTest数据失败! 响应数据格式不正确!', 'error');
-            niceCallback(callback, {});
-            return;
-          }
-          if (data.code === 0) {
-            this.experimentVerify(
-              trackingId,
-              { ...data, layerId },
-              originData,
-              callback
-            );
-          } else {
-            consoleText(`获取ABTest数据失败! ${data.errorMsg}!`, 'error');
-            // 接口业务失败返回false信息
-            niceCallback(callback, {});
-          }
-          // 接口调用返回后刷新接口调用标记
-          minipInstance.setStorageSync(
-            `${this.getHashKey(trackingId, layerId)}_gdp_abt_sign`,
-            Date.now() + 1000 * 60 * this.requestInterval
-          );
-        },
-        fail: handleRequestFailure
-      });
+      const stm = this.getNextStm(job);
+      attempt.setTask(
+        this.growingIO.minipInstance.request({
+          url: appendStm(snapshot.url, stm),
+          header: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          method: 'POST',
+          data: buildABRequestBody(snapshot, stm),
+          timeout: this.requestTimeout,
+          success: (result: any = {}) => {
+            if (!attempt.finish()) return;
+            if (!this.isRequestJobActive(job)) {
+              job.settle({});
+              return;
+            }
+            try {
+              const data = result?.data;
+              if (!isObject(data)) {
+                consoleText('获取ABTest数据失败! 响应数据格式不正确!', 'error');
+                job.settle({});
+              } else if (data.code === 0) {
+                this.experimentVerify(job, {
+                  ...data,
+                  layerId: snapshot.layerId
+                });
+              } else {
+                consoleText(`获取ABTest数据失败! ${data.errorMsg}!`, 'error');
+                job.settle({});
+              }
+            } catch (error) {
+              consoleText(`获取ABTest数据失败! ${error}!`, 'error');
+              job.settle({});
+            }
+          },
+          fail
+        })
+      );
     } catch (error) {
-      handleRequestFailure({ errMsg: error });
+      fail({ errMsg: error });
     }
   };
 
-  /**
-   * 实验校验（决定是否上报命中事件）
-   * @param {string} trackingId - 实例 ID
-   * @param {any} responseData - 响应数据
-   * @param {any} originData - 原始数据
-   * @param {any} callback - 回调函数
-   */
-  experimentVerify = (
-    trackingId: string,
-    responseData: any,
-    originData: any,
-    callback: any
-  ) => {
+  private experimentVerify = (job: ABRequestJob, responseData: any) => {
+    if (!this.isRequestJobActive(job)) {
+      job.settle({});
+      return;
+    }
     const {
       layerId,
       strategyId,
@@ -349,51 +431,38 @@ class GioABTest {
       strategyName,
       variables
     } = responseData;
-    const expDataKey = `${this.getHashKey(trackingId, layerId)}_gdp_abtd`;
-    // 从接口取回来的用于hash比较的数据对象
     const comparisonData = {
       layerId: toString(layerId),
       strategyId: toString(strategyId),
       experimentId: toString(experimentId),
       variables
     };
-    // 从本地存储中取回来的用于hash比较的数据对象
-    const controlData = { ...originData };
+    const controlData = {
+      ...(Date.now() >= job.originDataExpiresAt ? {} : job.originData)
+    };
     unset(controlData, ['layerName', 'strategyName', 'experimentName']);
-    const comparisonValue = hashCode(JSON.stringify(comparisonData));
-    const controlValue = hashCode(JSON.stringify(controlData));
-    // 需要传给下一步和存储的数据对象
     const expData = {
       ...comparisonData,
       layerName,
       strategyName,
       experimentName
     };
-    // 存储实验数据(无需经过hash对比判断直接复写存储，防止只改了名称)
-    this.growingIO.minipInstance.setStorageSync(
-      expDataKey,
-      expData,
-      new Date(
-        new Date().getFullYear(),
-        new Date().getMonth(),
-        new Date().getDate() + 1
-      ).getTime()
-    );
-    // 本地实验和请求回来的实验直接做整体hash数据对比
-    if (comparisonValue !== controlValue) {
-      // 数据不一致重新发命中埋点
-      if (strategyId && experimentId) {
-        this.buildExperimentHitEvent(trackingId, expData);
-      }
+    // 完成缓存事务再调用业务代码，重入读取不会看到半写入状态。
+    this.cacheStore.commit(job.snapshot, expData);
+    if (
+      hashCode(JSON.stringify(comparisonData)) !==
+        hashCode(JSON.stringify(controlData)) &&
+      strategyId &&
+      experimentId
+    ) {
+      this.buildExperimentHitEvent(job.snapshot.trackingId, expData);
     }
-    // 回调调用
-    niceCallback(callback, expData);
+    job.settle(expData);
   };
 
   /**
-   * 构建实验命中事件
-   * @param {string} trackingId - 实例 ID
-   * @param {any} expData - 实验数据
+   * 将 AB 服务返回的实验标识映射为既有 $exp_hit 属性；事件名称、属性名和普通
+   * 事件上下文均保持原协议，使分析端无需区分身份分流请求与原有实验命中事件。
    */
   buildExperimentHitEvent = (trackingId: string, expData: any) => {
     const {

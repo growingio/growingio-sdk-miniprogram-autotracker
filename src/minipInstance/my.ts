@@ -1,6 +1,6 @@
-import { compareVersion, consoleText } from '@@/utils/tools';
+import { consoleText, niceTry } from '@@/utils/tools';
 import { GrowingIOType } from '@@/types/growingIO';
-import { isFunction } from '@@/utils/glodash';
+import { isObject } from '@@/utils/glodash';
 import BaseImplements from './base';
 
 class Alipay extends BaseImplements {
@@ -18,13 +18,11 @@ class Alipay extends BaseImplements {
         enumerable: true,
         configurable: true,
         value: function () {
+          const { title } = arguments[0] || {};
           if (self.growingIO.gioSDKInitialized) {
-            // 这个currentPath一般认为是在onLoad中获取的当前小程序页面的path，此时SDK还没有parse，保存的还是上一个页面的信息
-            const currentPath = self.getCurrentPath();
-            const { title } = arguments[0] || {};
-            self.growingIO.dataStore.eventHooks.currentPage.configuredTitle[
-              currentPath
-            ] = title;
+            niceTry(() => {
+              self.growingIO.dataStore.eventHooks.currentPage.setConfiguredTitle(title);
+            });
           }
           return originSetter.apply(this, arguments);
         }
@@ -43,12 +41,22 @@ class Alipay extends BaseImplements {
   // 同步获取存储数据（支付宝小程序返回值与其他平台不同）
   getStorageSync = (key: string) => {
     const { data } = my.getStorageSync({ key });
+    if (isObject(data) && data.expiredAt) {
+      if (data.expiredAt < Date.now()) {
+        this.removeStorageSync(key);
+        return '';
+      }
+      return data.value;
+    }
     return data;
   };
 
   // 同步存储数据（支付宝小程序参数与其他平台不同）
-  setStorageSync = (key: string, value: any) => {
-    this.minip?.setStorageSync({ key, data: value });
+  setStorageSync = (key: string, value: any, expiredAt?: string | number) => {
+    this.minip?.setStorageSync({
+      key,
+      data: expiredAt ? { value, expiredAt } : value
+    });
   };
 
   // 同步移除指定数据
@@ -78,19 +86,6 @@ class Alipay extends BaseImplements {
       fail,
       complete
     });
-    const myVersion = this.minip.SDKVersion;
-    // 支付宝小程序2.0.0版本及以上才超时中断请求
-    // https://github.com/growingio/growingio-sdk-miniprogram-autotracker/issues/3
-    if (compareVersion(myVersion, '2.0.0') >= 0) {
-      // 设置超时中断请求
-      let t = setTimeout(() => {
-        if (requestTask?.abort && isFunction(requestTask?.abort)) {
-          requestTask?.abort();
-        }
-        clearTimeout(t);
-        t = null;
-      }, (timeout || 10000) + 10);
-    }
     return requestTask;
   };
 
